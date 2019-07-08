@@ -1,6 +1,6 @@
 import jws from "jws";
 import fetch from "node-fetch";
-import { IDirectory } from "./types";
+import {IDirectory} from "./types";
 
 export interface IAcmeClientOptions {
   /**
@@ -21,10 +21,17 @@ export class AcmeClient {
   }
 
   public async initialize(url: string) {
-    const response = await fetch(url, {
-      method: "GET",
-    });
-    this.directory = await response.json();
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+      });
+      this.directory = await response.json();
+      if (this.directory) {
+        return;
+      }
+    } catch (error) {
+      return error;
+    }
   }
 
   public async nonce() {
