@@ -1,6 +1,9 @@
 import jws from "jws";
 import fetch from "node-fetch";
+import * as core from "webcrypto-core";
+import { crypto } from "./crypto";
 import { IDirectory } from "./types";
+
 
 export interface IAcmeClientOptions {
   /**
@@ -46,10 +49,29 @@ export class AcmeClient {
 
   }
 
-  public createJWS() {
-    // jws.sign({
-    //     privateKey: 
-    // })
+  public async createJWS(payload: any) {
+    const token = jws.sign({
+        header: {
+          alg: (this.authKey.algorithm.name === "ECDSA"
+          ? `ES${(this.authKey.algorithm as EcKeyAlgorithm).namedCurve.replace("P-", "")}`
+          : "RS256") as any,
+        },
+        privateKey: await this.getKeyPem(),
+        payload,
+    });
+    return token;
+  }
+
+  private async getKeyPem() {
+    if (!this.authKeyPem) {
+      const pkcs8 = await crypto.subtle.exportKey("pkcs8", this.authKey);
+      this.authKeyPem = core.PemConverter.fromBufferSource(
+        pkcs8,
+        this.authKey.algorithm.name === "ECDSA"
+          ? "ECDSA PRIVATE KEY"
+          : "RSA PRIVATE KEY");
+    }
+    return this.authKeyPem;
   }
 
 }
