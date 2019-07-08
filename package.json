@@ -18,10 +18,14 @@
   },
   "homepage": "https://github.com/microshine/acme-test#readme",
   "devDependencies": {
+    "@types/jws": "^3.2.0",
     "@types/node-fetch": "^2.3.7",
     "typescript": "^3.5.2"
   },
   "dependencies": {
-    "node-fetch": "^2.6.0"
+    "@peculiar/webcrypto": "^1.0.12",
+    "jws": "^3.2.2",
+    "node-fetch": "^2.6.0",
+    "webcrypto-core": "^1.0.12"
   }
 }
