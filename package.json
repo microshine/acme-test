@@ -18,6 +18,10 @@
   },
   "homepage": "https://github.com/microshine/acme-test#readme",
   "devDependencies": {
+    "@types/node-fetch": "^2.3.7",
     "typescript": "^3.5.2"
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.0"
   }
 }
