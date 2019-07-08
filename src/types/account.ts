@@ -1,7 +1,7 @@
 import {URL} from "./directory";
 
 export interface IAccount {
-  status: string;
+  status: "valid" | "deactivated" | "revoked";
   contact?: string[];
   termsOfServiceAgreed?: boolean;
   orders: URL;
