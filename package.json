@@ -19,7 +19,9 @@
   "homepage": "https://github.com/microshine/acme-test#readme",
   "devDependencies": {
     "@types/jws": "^3.2.0",
+    "@types/mocha": "^5.2.7",
     "@types/node-fetch": "^2.3.7",
+    "mocha": "^6.1.4",
     "typescript": "^3.5.2"
   },
   "dependencies": {
