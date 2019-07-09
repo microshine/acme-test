@@ -6,3 +6,14 @@ export interface IAccount {
   termsOfServiceAgreed?: boolean;
   orders: URL;
 }
+
+export interface ICreateAccount {
+  contact?: string[];
+  termsOfServiceAgreed?: boolean;
+  onlyReturnExisting?: boolean;
+  externalAccountBinding?: object;
+}
+
+export interface IUpdateAccount {
+  contact: string[];
+}
