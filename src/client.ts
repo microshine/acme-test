@@ -18,7 +18,7 @@ export interface IAcmeClientOptions {
 
 export interface ICreateJwsOptions {
   url?: string;
-  useJwk?: boolean;
+  kid?: string;
 }
 
 export interface IPostResult {
@@ -62,7 +62,7 @@ export class AcmeClient {
   }
 
   public async createAccount(params: ICreateAccount): Promise<IAccount> {
-    const res = await this.post(this.getDirectory().newAccount, params, { useJwk: true });
+    const res = await this.post(this.getDirectory().newAccount, params);
     if (!res.error) {
       const location = res.headers.get("location");
       if (!location) {
@@ -77,7 +77,7 @@ export class AcmeClient {
 
   public async findAccount(): Promise<IAccount | null> {
     const params: ICreateAccount = { onlyReturnExisting: true };
-    const res = await this.post(this.getDirectory().newAccount, params, { useJwk: true });
+    const res = await this.post(this.getDirectory().newAccount, params);
     if (!res.error) {
       const location = res.headers.get("location");
       if (!location) {
@@ -93,9 +93,9 @@ export class AcmeClient {
 
   public async updateAccount(params: IUpdateAccount): Promise<IAccount> {
     if (!this.authKey.id) {
-      throw new Error("Create of Find account first");
+      throw new Error("Create or Find account first");
     }
-    const res = await this.post(this.authKey.id, params);
+    const res = await this.post(this.authKey.id, params, { kid: this.authKey.id });
     if (!res.error) {
       return res.result;
     } else {
@@ -152,13 +152,15 @@ export class AcmeClient {
         ? `ES${(this.authKey.key.algorithm as EcKeyAlgorithm).namedCurve.replace("P-", "")}`
         : "RS256") as any,
     };
-    if (options.useJwk) {
+    if (!options.kid) {
       let jwk = await crypto.subtle.exportKey("jwk", this.authKey.key);
       delete jwk.d;
       const publicKey = await crypto.subtle.importKey("jwk", jwk, this.authKey.key.algorithm as any, true, ["verify"]);
       jwk = await crypto.subtle.exportKey("jwk", publicKey);
       delete jwk.alg;
       (header as any).jwk = jwk;
+    } else {
+      header.kid = options.kid;
     }
     if (options.url) {
       header.url = options.url;

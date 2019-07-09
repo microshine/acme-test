@@ -35,7 +35,7 @@ context("Client", () => {
     assert.equal(!!account, false);
   });
 
-  it("create account", async () => {
+  it.only("create account", async () => {
     const account = await client.createAccount({
       contact: ["mailto:microshine@mail.ru"],
       onlyReturnExisting: false,
@@ -58,7 +58,7 @@ context("Client", () => {
     assert.equal(!!account, true);
   });
 
-  it("update account", async () => {
+  it.only("update account", async () => {
     const account = await client.updateAccount({contact: ["mailto:testmail@mail.ru"]});
     assert.equal(!!account, true);
   });
