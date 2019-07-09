@@ -7,7 +7,7 @@ const urlServer = {
   LetSEncrypt: "https://acme-staging-v02.api.letsencrypt.org/directory",
   local: "http://localhost:60298/directory",
 };
-const url = urlServer.local;
+const url = urlServer.LetSEncrypt;
 
 context(`Client ${url}`, () => {
 
@@ -56,6 +56,9 @@ context(`Client ${url}`, () => {
       assert.equal(res.status, 400);
       assert.equal(res.error.type, "urn:ietf:params:acme:error:accountDoesNotExist");
     });
+
+    // mailto
+    // validate email
 
     it("create account", async () => {
       const res = await client.createAccount({
@@ -121,6 +124,51 @@ context(`Client ${url}`, () => {
       if (url !== urlServer.LetSEncrypt) {
         assert.equal(!!res.result.orders, true);
       }
+    });
+
+  });
+
+  context("Certificate Management", () => {
+
+    before(async () => {
+      await client.createAccount({
+        contact: ["mailto:microshine@mail.ru"],
+        termsOfServiceAgreed: true,
+      });
+    });
+
+    it("Error: create order without required params", async () => {
+      const date = new Date();
+      date.setFullYear(date.getFullYear() + 1);
+      const res = await client.newOrder({
+        identifiers: [],
+      });
+      if (!res.error) {
+        throw new Error("No Error");
+      }
+      assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(res.error.type, "urn:ietf:params:acme:error:malformed");
+      assert.equal(res.status, 400);
+      assert.equal(res.error.status, 400);
+    });
+
+    it.only("create order", async () => {
+      const date = new Date();
+      date.setFullYear(date.getFullYear() + 1);
+      const res = await client.newOrder({
+        identifiers: [
+          {type: "dns", value: "www.example.org"},
+          {type: "dns", value: "example.org"},
+        ],
+        // notAfter: date.toISOString(),
+        // notBefore: new Date().toISOString(),
+      });
+      assert.equal(res.headers.has("link"), true);
+      assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(res.status, 201);
+      assert.equal(res.result.status, "pending");
+      assert.equal(!!res.result.expires, true);
+      assert.equal(!!res.result.authorizations, true);
     });
 
   });

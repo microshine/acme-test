@@ -6,7 +6,7 @@ import {crypto} from "./crypto";
 import {AcmeError} from "./error";
 import {
   Base64UrlString, IAccount, ICreateAccount,
-  IDirectory, IError, IKeyChange, IToken, IUpdateAccount,
+  IDirectory, IError, IKeyChange, IToken, IUpdateAccount, INewOrder,
 } from "./types";
 
 export interface IAcmeClientOptions {
@@ -91,10 +91,7 @@ export class AcmeClient {
   // }
 
   public async updateAccount(params: IUpdateAccount): Promise<IPostResult<IAccount>> {
-    if (!this.authKey.id) {
-      throw new Error("Create or Find account first");
-    }
-    return this.post(this.authKey.id, params, {kid: this.authKey.id});
+    return this.post(this.getKeyId(), params, {kid: this.getKeyId()});
   }
 
   public async changeKey(key?: CryptoKey): Promise<IPostResult<IAccount>> {
@@ -163,6 +160,11 @@ export class AcmeClient {
     return res;
   }
 
+  public async newOrder(params: INewOrder) {
+    return this.post(this.getDirectory().newOrder, params, {kid: this.getKeyId()});
+  }
+
+
   public async createJWS(payload: any, options: ICreateJwsOptions) {
     const key = options.key || this.authKey.key;
     const keyPem = await this.getKeyPem(key);
@@ -220,6 +222,13 @@ export class AcmeClient {
       throw new Error("Call 'initialize' method fist");
     }
     return this.directory;
+  }
+
+  private getKeyId() {
+    if (!this.authKey.id) {
+      throw new Error("Create or Find account first");
+    }
+    return this.authKey.id;
   }
 
   private getNonce(response: Response) {
