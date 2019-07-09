@@ -69,4 +69,9 @@ context("Client", () => {
     assert.equal(!!account, true);
   });
 
+  it("deactivate", async () => {
+    const account = await client.deactivate();
+    assert.equal(!!account, true);
+  });
+
 });

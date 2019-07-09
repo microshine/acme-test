@@ -113,11 +113,24 @@ export class AcmeClient {
       account: this.authKey.id,
       oldKey: await this.exportPublicKey(this.authKey.key),
     };
-    const innerToken = await this.createJWS(key, { omitNonce: true });
+    const innerToken = await this.createJWS(keyChange, { omitNonce: true, url: this.getDirectory().keyChange, key });
 
-    const res = await this.post(this.authKey.id, innerToken, { kid: this.authKey.id });
+    const res = await this.post(this.getDirectory().keyChange, innerToken, { kid: this.authKey.id });
     if (!res.error) {
       this.authKey.key = key;
+      return res.result;
+    } else {
+      throw new AcmeError(res.error);
+    }
+  }
+
+  public async deactivate() {
+    if (!this.authKey.id) {
+      throw new Error("Create or Find account first");
+    }
+
+    const res = await this.post(this.authKey.id, { status: "deactivated" }, { kid: this.authKey.id });
+    if (!res.error) {
       return res.result;
     } else {
       throw new AcmeError(res.error);
@@ -129,7 +142,7 @@ export class AcmeClient {
       this.lastNonce = await this.nonce();
     }
 
-    const token = await this.createJWS(params, options || { url });
+    const token = await this.createJWS(params, Object.assign({ url }, options));
     const response = await fetch(url, {
       method: "POST",
       headers: {
