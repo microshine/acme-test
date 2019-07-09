@@ -17,3 +17,8 @@ export interface ICreateAccount {
 export interface IUpdateAccount {
   contact: string[];
 }
+
+export interface IKeyChange {
+  account: string;
+  oldKey: JsonWebKey;
+}

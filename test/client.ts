@@ -58,8 +58,14 @@ context("Client", () => {
     assert.equal(!!account, true);
   });
 
-  it.only("update account", async () => {
-    const account = await client.updateAccount({contact: ["mailto:testmail@mail.ru"]});
+  it("update account", async () => {
+    const account = await client.updateAccount({ contact: ["mailto:testmail@mail.ru"] });
+    assert.equal(!!account, true);
+  });
+
+  it.only("change key", async () => {
+    const newKey = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
+    const account = await client.changeKey(newKey.privateKey);
     assert.equal(!!account, true);
   });
 

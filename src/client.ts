@@ -6,7 +6,7 @@ import { crypto } from "./crypto";
 import { AcmeError } from "./error";
 import {
   Base64UrlString, IAccount, ICreateAccount,
-  IDirectory, IError, IToken, IUpdateAccount,
+  IDirectory, IError, IKeyChange, IToken, IUpdateAccount,
 } from "./types";
 
 export interface IAcmeClientOptions {
@@ -19,6 +19,8 @@ export interface IAcmeClientOptions {
 export interface ICreateJwsOptions {
   url?: string;
   kid?: string;
+  omitNonce?: boolean;
+  key?: CryptoKey;
 }
 
 export interface IPostResult {
@@ -31,7 +33,6 @@ export interface IPostResult {
 export interface IAuthKey {
   key: CryptoKey;
   id?: Base64UrlString;
-  pem?: string;
 }
 
 export class AcmeClient {
@@ -103,6 +104,26 @@ export class AcmeClient {
     }
   }
 
+  public async changeKey(key: CryptoKey): Promise<IAccount> {
+    if (!this.authKey.id) {
+      throw new Error("Create or Find account first");
+    }
+
+    const keyChange: IKeyChange = {
+      account: this.authKey.id,
+      oldKey: await this.exportPublicKey(this.authKey.key),
+    };
+    const innerToken = await this.createJWS(key, { omitNonce: true });
+
+    const res = await this.post(this.authKey.id, innerToken, { kid: this.authKey.id });
+    if (!res.error) {
+      this.authKey.key = key;
+      return res.result;
+    } else {
+      throw new AcmeError(res.error);
+    }
+  }
+
   public async post(url: string, params: any, options?: ICreateJwsOptions) {
     if (!this.lastNonce) {
       this.lastNonce = await this.nonce();
@@ -146,18 +167,15 @@ export class AcmeClient {
   }
 
   public async createJWS(payload: any, options: ICreateJwsOptions) {
-    const key = await this.getKeyPem();
+    const key = options.key || this.authKey.key;
+    const keyPem = await this.getKeyPem(key);
     const header: jws.Header = {
-      alg: (this.authKey.key.algorithm.name === "ECDSA"
-        ? `ES${(this.authKey.key.algorithm as EcKeyAlgorithm).namedCurve.replace("P-", "")}`
+      alg: (key.algorithm.name === "ECDSA"
+        ? `ES${(key.algorithm as EcKeyAlgorithm).namedCurve.replace("P-", "")}`
         : "RS256") as any,
     };
     if (!options.kid) {
-      let jwk = await crypto.subtle.exportKey("jwk", this.authKey.key);
-      delete jwk.d;
-      const publicKey = await crypto.subtle.importKey("jwk", jwk, this.authKey.key.algorithm as any, true, ["verify"]);
-      jwk = await crypto.subtle.exportKey("jwk", publicKey);
-      delete jwk.alg;
+      const jwk = await this.exportPublicKey(key);
       (header as any).jwk = jwk;
     } else {
       header.kid = options.kid;
@@ -165,10 +183,12 @@ export class AcmeClient {
     if (options.url) {
       header.url = options.url;
     }
-    header.nonce = this.lastNonce;
+    if (!options.omitNonce) {
+      header.nonce = this.lastNonce;
+    }
     const signature = jws.sign({
       header,
-      privateKey: key,
+      privateKey: keyPem,
       payload,
     });
 
@@ -182,14 +202,20 @@ export class AcmeClient {
     return res;
   }
 
-  private async getKeyPem() {
-    if (!this.authKey.pem) {
-      const pkcs8 = await crypto.subtle.exportKey("pkcs8", this.authKey.key);
-      this.authKey.pem = core.PemConverter.fromBufferSource(
-        pkcs8,
-        "PRIVATE KEY");
-    }
-    return this.authKey.pem;
+  private async exportPublicKey(key: CryptoKey) {
+    let jwk = await crypto.subtle.exportKey("jwk", key);
+    delete jwk.d;
+    const publicKey = await crypto.subtle.importKey("jwk", jwk, key.algorithm as any, true, ["verify"]);
+    jwk = await crypto.subtle.exportKey("jwk", publicKey);
+    delete jwk.alg;
+    return jwk;
+  }
+
+  private async getKeyPem(key: CryptoKey) {
+    const pkcs8 = await crypto.subtle.exportKey("pkcs8", this.authKey.key);
+    return core.PemConverter.fromBufferSource(
+      pkcs8,
+      "PRIVATE KEY");
   }
 
   private getDirectory() {
