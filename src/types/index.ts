@@ -3,3 +3,4 @@ export * from "./directory";
 export * from "./account";
 export * from "./token";
 export * from "./error";
+export * from "./order";
