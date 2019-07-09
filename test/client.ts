@@ -1,7 +1,8 @@
 import * as assert from "assert";
-import {Headers} from "node-fetch";
-import {AcmeClient} from "../src/client";
-import {crypto} from "../src/crypto";
+import { Headers } from "node-fetch";
+import { AcmeClient } from "../src/client";
+import { crypto } from "../src/crypto";
+import { AcmeError } from "../src/error";
 
 const urlServer = {
   LetSEncrypt: "https://acme-staging-v02.api.letsencrypt.org/directory",
@@ -20,14 +21,17 @@ context(`Client ${url}`, () => {
     modulusLength: 2048,
   };
 
-  before(async () => {
-    const keys = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
-    authKey = keys.privateKey;
-    client = new AcmeClient({authKey});
-    await client.initialize(url);
-  });
-
   context("Account Management", () => {
+
+    before(async () => {
+      const keys = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
+      authKey = keys.privateKey;
+    });
+
+    before(async () => {
+      client = new AcmeClient({ authKey });
+      await client.initialize(url);
+    });
 
     it("Error: no agreement to the terms", async () => {
       const res = await client.createAccount({
@@ -79,13 +83,13 @@ context(`Client ${url}`, () => {
     });
 
     it("finding an account", async () => {
-      const res = await client.createAccount({onlyReturnExisting: true});
+      const res = await client.createAccount({ onlyReturnExisting: true });
       checkHeaders(res.headers);
       checkResAccount(res, 200);
     });
 
     it("account update", async () => {
-      const res = await client.updateAccount({contact: ["mailto:testmail@mail.ru"]});
+      const res = await client.updateAccount({ contact: ["mailto:testmail@mail.ru"] });
       assert.equal(res.headers.has("link"), true);
       assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.result.status, "valid");
@@ -131,13 +135,30 @@ context(`Client ${url}`, () => {
   context("Certificate Management", () => {
 
     before(async () => {
-      await client.createAccount({
-        contact: ["mailto:microshine@mail.ru"],
-        termsOfServiceAgreed: true,
-      });
+      const acmeKey = process.env.ACME_KEY;
+      assert.equal(!!acmeKey, true, "Environment variable ACME_KEY does not exist");
+      authKey = await crypto.subtle.importKey("pkcs8", Buffer.from(acmeKey!, "base64"), rsaAlg, true, ["sign"]);
     });
 
-    it("Error: create order without required params", async () => {
+    before(async () => {
+      client = new AcmeClient({ authKey });
+      await client.initialize(url);
+    });
+
+    before(async () => {
+      const res = await client.createAccount({
+        onlyReturnExisting: true,
+      });
+      if (res.error) {
+        // create new account
+        await client.createAccount({
+          contact: ["mailto:microshine@mail.ru"],
+          termsOfServiceAgreed: true,
+        });
+      }
+    });
+
+    it.only("Error: create order without required params", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       const res = await client.newOrder({
@@ -152,13 +173,13 @@ context(`Client ${url}`, () => {
       assert.equal(res.error.status, 400);
     });
 
-    it.only("create order", async () => {
+    it("create order", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       const res = await client.newOrder({
         identifiers: [
-          {type: "dns", value: "www.example.org"},
-          {type: "dns", value: "example.org"},
+          { type: "dns", value: "www.example.org" },
+          { type: "dns", value: "example.org" },
         ],
         // notAfter: date.toISOString(),
         // notBefore: new Date().toISOString(),
