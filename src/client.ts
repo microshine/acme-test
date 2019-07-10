@@ -5,8 +5,9 @@ import * as core from "webcrypto-core";
 import {crypto} from "./crypto";
 import {
   Base64UrlString, IAccount, ICreateAccount,
-  IDirectory, IError, IKeyChange, INewOrder, IToken, IUpdateAccount,
+  IDirectory, IError, IKeyChange, INewOrder, IToken, IUpdateAccount, IOrder,
 } from "./types";
+import {IAuthorization} from "./types/authorization";
 
 export interface IAcmeClientOptions {
   /**
@@ -22,6 +23,10 @@ export interface ICreateJwsOptions {
   key?: CryptoKey;
 }
 
+export interface IGetOptions {
+hostname?: string;
+}
+
 export interface IPostResult<T = any> {
   status: number;
   result: T;
@@ -33,6 +38,8 @@ export interface IAuthKey {
   key: CryptoKey;
   id?: Base64UrlString;
 }
+
+type Method = "post" | "get";
 
 export class AcmeClient {
 
@@ -136,8 +143,45 @@ export class AcmeClient {
     return res;
   }
 
-  public async newOrder(params: INewOrder) {
+  public async get(url: string, options: IGetOptions = {}) {
+    //@ts-ignore
+    const response = await fetch(url, {method: "get", headers: {host: options.hostname}});
+    if (!(response.status >= 200 && response.status < 300)) {
+      // TODO: throw exception
+      // TODO: Detect ACME exception
+      const error = await response.text();
+      this.lastNonce = response.headers.get("replay-nonce") || "";
+      try {
+        const errJson = JSON.parse(error);
+        const errRes: IPostResult = {
+          headers: response.headers,
+          error: errJson,
+          status: response.status,
+          result: null,
+        };
+        return errRes;
+      } catch {
+        throw new Error(error);
+      }
+    }
+    const json = await response.json();
+    const res: IPostResult = {
+      headers: response.headers,
+      result: json,
+      status: response.status,
+    };
+    return res;
+  }
+
+  public async newOrder(params: INewOrder): Promise<IPostResult<IOrder>> {
     return this.post(this.getDirectory().newOrder, params, {kid: this.getKeyId()});
+  }
+
+  public async getAuthorization(url: string, method: Method = "post"): Promise<IPostResult<IAuthorization>> {
+    if (method === "post") {
+      return this.post(url, "", {kid: this.getKeyId()});
+    }
+    return this.get(url);
   }
 
   public async createJWS(payload: any, options: ICreateJwsOptions) {
@@ -176,6 +220,13 @@ export class AcmeClient {
     return res;
   }
 
+  public getKeyId() {
+    if (!this.authKey.id) {
+      throw new Error("Create or Find account first");
+    }
+    return this.authKey.id;
+  }
+
   private async exportPublicKey(key: CryptoKey) {
     let jwk = await crypto.subtle.exportKey("jwk", key);
     delete jwk.d;
@@ -197,13 +248,6 @@ export class AcmeClient {
       throw new Error("Call 'initialize' method fist");
     }
     return this.directory;
-  }
-
-  private getKeyId() {
-    if (!this.authKey.id) {
-      throw new Error("Create or Find account first");
-    }
-    return this.authKey.id;
   }
 
   private getNonce(response: Response) {

@@ -5,12 +5,14 @@ import {Headers} from "node-fetch";
 import fetch from "node-fetch";
 import {AcmeClient} from "../src/client";
 import {crypto} from "../src/crypto";
+import {IOrder} from "../src/types";
+import {IAuthorization, IChallenge, IHttpChallenge} from "../src/types/authorization";
 
 const urlServer = {
   LetSEncrypt: "https://acme-staging-v02.api.letsencrypt.org/directory",
   local: "http://localhost:60298/directory",
 };
-const url = urlServer.local;
+const url = urlServer.LetSEncrypt;
 
 context(`Client ${url}`, () => {
 
@@ -149,6 +151,9 @@ context(`Client ${url}`, () => {
 
   context("Certificate Management", () => {
 
+    let order: IOrder;
+    let authorization: IAuthorization;
+
     before(async () => {
       const acmeKey = process.env.ACME_KEY;
       assert.equal(!!acmeKey, true, "Environment variable ACME_KEY does not exist");
@@ -188,7 +193,7 @@ context(`Client ${url}`, () => {
       assert.equal(res.error.status, 400);
     });
 
-    it("create order", async () => {
+    it.only("create order", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       const params: any = {
@@ -208,6 +213,21 @@ context(`Client ${url}`, () => {
       assert.equal(res.result.status, "pending");
       assert.equal(!!res.result.expires, true);
       assert.equal(!!res.result.authorizations, true);
+      order = res.result;
+    });
+
+    it.only("authorization", async () => {
+      const res = await client.getAuthorization(order.authorizations[0]);
+      authorization = res.result;
+      console.log(authorization);
+    });
+
+    it.only("challange http-01", async () => {
+      const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
+      const res = await client.get(
+        challange.url + `/.well-known/acme-challenge/${challange.token}`,
+        {hostname: authorization.identifier.value});
+      console.log(res);
     });
 
   });
