@@ -27,6 +27,8 @@
   },
   "dependencies": {
     "@peculiar/webcrypto": "^1.0.12",
+    "@types/dotenv": "^6.1.1",
+    "dotenv": "^8.0.0",
     "jws": "^3.2.2",
     "node-fetch": "^2.6.0",
     "pvtsutils": "^1.0.4",

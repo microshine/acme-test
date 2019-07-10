@@ -1,14 +1,16 @@
+import {config as env} from "dotenv";
+env();
 import * as assert from "assert";
-import { Headers } from "node-fetch";
-import { AcmeClient } from "../src/client";
-import { crypto } from "../src/crypto";
-import { AcmeError } from "../src/error";
+import {Headers} from "node-fetch";
+import fetch from "node-fetch";
+import {AcmeClient} from "../src/client";
+import {crypto} from "../src/crypto";
 
 const urlServer = {
   LetSEncrypt: "https://acme-staging-v02.api.letsencrypt.org/directory",
   local: "http://localhost:60298/directory",
 };
-const url = urlServer.LetSEncrypt;
+const url = urlServer.local;
 
 context(`Client ${url}`, () => {
 
@@ -21,6 +23,19 @@ context(`Client ${url}`, () => {
     modulusLength: 2048,
   };
 
+  context("Directory", () => {
+
+    it("directory", async () => {
+      const res = await fetch(url, {method: "GET"});
+      const body = await res.json();
+      assert.equal(!!body.keyChange, true);
+      assert.equal(!!body.newAccount, true);
+      assert.equal(!!body.newNonce, true);
+      assert.equal(!!body.newOrder, true);
+      assert.equal(!!body.revokeCert, true);
+    });
+  });
+
   context("Account Management", () => {
 
     before(async () => {
@@ -29,7 +44,7 @@ context(`Client ${url}`, () => {
     });
 
     before(async () => {
-      client = new AcmeClient({ authKey });
+      client = new AcmeClient({authKey});
       await client.initialize(url);
     });
 
@@ -83,13 +98,13 @@ context(`Client ${url}`, () => {
     });
 
     it("finding an account", async () => {
-      const res = await client.createAccount({ onlyReturnExisting: true });
+      const res = await client.createAccount({onlyReturnExisting: true});
       checkHeaders(res.headers);
       checkResAccount(res, 200);
     });
 
     it("account update", async () => {
-      const res = await client.updateAccount({ contact: ["mailto:testmail@mail.ru"] });
+      const res = await client.updateAccount({contact: ["mailto:testmail@mail.ru"]});
       assert.equal(res.headers.has("link"), true);
       assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.result.status, "valid");
@@ -141,7 +156,7 @@ context(`Client ${url}`, () => {
     });
 
     before(async () => {
-      client = new AcmeClient({ authKey });
+      client = new AcmeClient({authKey});
       await client.initialize(url);
     });
 
@@ -158,7 +173,7 @@ context(`Client ${url}`, () => {
       }
     });
 
-    it.only("Error: create order without required params", async () => {
+    it("Error: create order without required params", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       const res = await client.newOrder({
@@ -176,14 +191,17 @@ context(`Client ${url}`, () => {
     it("create order", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
-      const res = await client.newOrder({
+      const params: any = {
         identifiers: [
-          { type: "dns", value: "www.example.org" },
-          { type: "dns", value: "example.org" },
+          {type: "dns", value: "www.example.org"},
+          {type: "dns", value: "example.org"},
         ],
-        // notAfter: date.toISOString(),
-        // notBefore: new Date().toISOString(),
-      });
+      };
+      if (url !== urlServer.LetSEncrypt) {
+        params.notAfter = date.toISOString();
+        params.notBefore = new Date().toISOString();
+      }
+      const res = await client.newOrder(params);
       assert.equal(res.headers.has("link"), true);
       assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.status, 201);

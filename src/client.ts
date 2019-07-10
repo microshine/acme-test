@@ -3,10 +3,9 @@ import {Headers, Response} from "node-fetch";
 import fetch from "node-fetch";
 import * as core from "webcrypto-core";
 import {crypto} from "./crypto";
-import {AcmeError} from "./error";
 import {
   Base64UrlString, IAccount, ICreateAccount,
-  IDirectory, IError, IKeyChange, IToken, IUpdateAccount, INewOrder,
+  IDirectory, IError, IKeyChange, INewOrder, IToken, IUpdateAccount,
 } from "./types";
 
 export interface IAcmeClientOptions {
@@ -163,7 +162,6 @@ export class AcmeClient {
   public async newOrder(params: INewOrder) {
     return this.post(this.getDirectory().newOrder, params, {kid: this.getKeyId()});
   }
-
 
   public async createJWS(payload: any, options: ICreateJwsOptions) {
     const key = options.key || this.authKey.key;
