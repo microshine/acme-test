@@ -73,37 +73,17 @@ export class AcmeClient {
     return res;
   }
 
-  // public async findAccount(): Promise<IAccount | null> {
-  //   const params: ICreateAccount = {onlyReturnExisting: true};
-  //   const res = await this.post(this.getDirectory().newAccount, params);
-  //   if (!res.error) {
-  //     const location = res.headers.get("location");
-  //     if (!location) {
-  //       throw new Error("Cannot get Location header");
-  //     }
-  //     this.authKey.id = location;
-  //     return res.result;
-  //   } else {
-  //     // TODO: check headers and status
-  //     return null;
-  //   }
-  // }
-
   public async updateAccount(params: IUpdateAccount): Promise<IPostResult<IAccount>> {
     return this.post(this.getKeyId(), params, {kid: this.getKeyId()});
   }
 
   public async changeKey(key?: CryptoKey): Promise<IPostResult<IAccount>> {
-    if (!this.authKey.id) {
-      throw new Error("Create or Find account first");
-    }
-
     const keyChange: IKeyChange = {
-      account: this.authKey.id,
+      account: this.getKeyId(),
       oldKey: await this.exportPublicKey(this.authKey.key),
     };
     const innerToken = await this.createJWS(keyChange, {omitNonce: true, url: this.getDirectory().keyChange, key});
-    const res = await this.post(this.getDirectory().keyChange, innerToken, {kid: this.authKey.id});
+    const res = await this.post(this.getDirectory().keyChange, innerToken, {kid: this.getKeyId()});
     if (!res.error) {
       this.authKey.key = key!;
     }
@@ -111,10 +91,7 @@ export class AcmeClient {
   }
 
   public async deactivate(): Promise<IPostResult<IAccount>> {
-    if (!this.authKey.id) {
-      throw new Error("Create or Find account first");
-    }
-    return this.post(this.authKey.id, {status: "deactivated"}, {kid: this.authKey.id});
+    return this.post(this.getKeyId(), {status: "deactivated"}, {kid: this.getKeyId()});
   }
 
   public async post(url: string, params: any, options?: ICreateJwsOptions) {
