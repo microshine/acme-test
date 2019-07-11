@@ -5,9 +5,9 @@ import * as core from "webcrypto-core";
 import {crypto} from "./crypto";
 import {
   Base64UrlString, IAccount, ICreateAccount,
-  IDirectory, IError, IKeyChange, INewOrder, IToken, IUpdateAccount, IOrder,
+  IDirectory, IError, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
 } from "./types";
-import {IAuthorization} from "./types/authorization";
+import {IAuthorization, IChallenge, IHttpChallenge} from "./types/authorization";
 
 export interface IAcmeClientOptions {
   /**
@@ -24,7 +24,7 @@ export interface ICreateJwsOptions {
 }
 
 export interface IGetOptions {
-hostname?: string;
+  hostname?: string;
 }
 
 export interface IPostResult<T = any> {
@@ -101,6 +101,21 @@ export class AcmeClient {
     return this.post(this.getKeyId(), {status: "deactivated"}, {kid: this.getKeyId()});
   }
 
+  public async createURL(url: string, id: string, token: string) {
+    const body = JSON.stringify({id, token: `${id}.${token}`});
+    console.log(body);
+    const res = await fetch(url, {
+      method: "post",
+      headers: {
+        "content-type": "application/json",
+      },
+      body,
+    });
+    if (res.status !== 204) {
+      throw new Error(await res.text());
+    }
+  }
+
   public async post(url: string, params: any, options?: ICreateJwsOptions) {
     if (!this.lastNonce) {
       this.lastNonce = await this.nonce();
@@ -143,9 +158,8 @@ export class AcmeClient {
     return res;
   }
 
-  public async get(url: string, options: IGetOptions = {}) {
-    //@ts-ignore
-    const response = await fetch(url, {method: "get", headers: {host: options.hostname}});
+  public async get(url: string) {
+    const response = await fetch(url, {method: "get"});
     if (!(response.status >= 200 && response.status < 300)) {
       // TODO: throw exception
       // TODO: Detect ACME exception
@@ -177,6 +191,12 @@ export class AcmeClient {
     return this.post(this.getDirectory().newOrder, params, {kid: this.getKeyId()});
   }
 
+  public async getChallenge(url: string, method: Method = "post"): Promise<IPostResult<IHttpChallenge>> {
+    if (method === "post") {
+      return this.post(url, {}, {kid: this.getKeyId()});
+    }
+    return this.get(url);
+  }
   public async getAuthorization(url: string, method: Method = "post"): Promise<IPostResult<IAuthorization>> {
     if (method === "post") {
       return this.post(url, "", {kid: this.getKeyId()});

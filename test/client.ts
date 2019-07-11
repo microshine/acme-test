@@ -1,14 +1,20 @@
+
 import {config as env} from "dotenv";
 env();
 import * as assert from "assert";
 import {Headers} from "node-fetch";
 import fetch from "node-fetch";
+import {Convert} from "pvtsutils";
 import {AcmeClient} from "../src/client";
 import {crypto} from "../src/crypto";
 import {IOrder} from "../src/types";
 import {IAuthorization, IChallenge, IHttpChallenge} from "../src/types/authorization";
 
+process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
+
 const urlServer = {
+  ACME: "https://aeg-dev0-srv.aegdomain2.com/acme/directory",
+  domain: "http://aeg-dev0-srv.aegdomain2.com/acme-challenge",
   LetSEncrypt: "https://acme-staging-v02.api.letsencrypt.org/directory",
   local: "http://localhost:60298/directory",
 };
@@ -153,6 +159,7 @@ context(`Client ${url}`, () => {
 
     let order: IOrder;
     let authorization: IAuthorization;
+    let challengeHttp: IChallenge;
 
     before(async () => {
       const acmeKey = process.env.ACME_KEY;
@@ -197,16 +204,14 @@ context(`Client ${url}`, () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       const params: any = {
-        identifiers: [
-          {type: "dns", value: "www.example.org"},
-          {type: "dns", value: "example.org"},
-        ],
+        identifiers: [{type: "dns", value: "aeg-dev0-srv.aegdomain2.com"}],
       };
       if (url !== urlServer.LetSEncrypt) {
         params.notAfter = date.toISOString();
         params.notBefore = new Date().toISOString();
       }
       const res = await client.newOrder(params);
+      console.log(res);
       assert.equal(res.headers.has("link"), true);
       assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.status, 201);
@@ -216,18 +221,46 @@ context(`Client ${url}`, () => {
       order = res.result;
     });
 
-    it.only("authorization", async () => {
+    it("authorization", async () => {
       const res = await client.getAuthorization(order.authorizations[0]);
+      assert.equal(res.headers.has("link"), true);
+      // assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(res.status, 200);
+      assert.equal(res.result.status, "pending");
+      assert.equal(!!res.result.expires, true);
+      assert.equal(!!res.result.identifier, true);
+      assert.equal(!!res.result.challenges, true);
       authorization = res.result;
-      console.log(authorization);
+      const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
+      const account = await client.createAccount({onlyReturnExisting: true});
+      const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
+      await client.createURL(
+        urlServer.domain, challange.token,
+        Convert.ToBase64Url(await crypto.subtle.digest("SHA-256", Buffer.from(json))),
+      );
     });
 
-    it.only("challange http-01", async () => {
+    it("challange http-01 pending", async () => {
       const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
-      const res = await client.get(
-        challange.url + `/.well-known/acme-challenge/${challange.token}`,
-        {hostname: authorization.identifier.value});
-      console.log(res);
+      assert.equal(challange.status, "pending");
+    });
+
+    it("challange http-01 valid", async () => {
+      let challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
+      await client.getChallenge(challange.url, "post");
+      let count = 0;
+      while (challange.status === "pending" && count++ < 5) {
+        await pause(2000);
+        const res = await client.getChallenge(challange.url, "get");
+        challange = res.result;
+      }
+      assert.equal(challange.status, "valid");
+    });
+
+    // order ready
+
+    it("finalize", async () => {
+
     });
 
   });
@@ -245,3 +278,8 @@ context(`Client ${url}`, () => {
     }
   }
 });
+
+
+async function pause(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+} 

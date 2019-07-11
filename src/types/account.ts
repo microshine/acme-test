@@ -5,6 +5,11 @@ export interface IAccount {
   contact?: string[];
   termsOfServiceAgreed?: boolean;
   orders: URL;
+  key: {
+    e: string;
+    kty: string;
+    n: string;
+  };
 }
 
 export interface ICreateAccount {
