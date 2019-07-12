@@ -21,16 +21,20 @@
     "@types/jws": "^3.2.0",
     "@types/mocha": "^5.2.7",
     "@types/node-fetch": "^2.3.7",
+    "@types/pkijs": "0.0.2",
     "mocha": "^6.1.4",
     "ts-node": "^8.3.0",
     "typescript": "^3.5.2"
   },
   "dependencies": {
     "@peculiar/webcrypto": "^1.0.12",
+    "@types/asn1js": "0.0.1",
     "@types/dotenv": "^6.1.1",
+    "asn1js": "^2.0.22",
     "dotenv": "^8.0.0",
     "jws": "^3.2.2",
     "node-fetch": "^2.6.0",
+    "pkijs": "^2.1.80",
     "pvtsutils": "^1.0.4",
     "webcrypto-core": "^1.0.12"
   }

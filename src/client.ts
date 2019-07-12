@@ -5,7 +5,7 @@ import * as core from "webcrypto-core";
 import {crypto} from "./crypto";
 import {
   Base64UrlString, IAccount, ICreateAccount,
-  IDirectory, IError, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
+  IDirectory, IError, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount, IFinalize,
 } from "./types";
 import {IAuthorization, IChallenge, IHttpChallenge} from "./types/authorization";
 
@@ -103,7 +103,6 @@ export class AcmeClient {
 
   public async createURL(url: string, id: string, token: string) {
     const body = JSON.stringify({id, token: `${id}.${token}`});
-    console.log(body);
     const res = await fetch(url, {
       method: "post",
       headers: {
@@ -197,6 +196,18 @@ export class AcmeClient {
     }
     return this.get(url);
   }
+
+  public async request<T>(url: string, method: Method = "post", params = {}): Promise<IPostResult<T>> {
+    if (method === "post") {
+      return this.post(url, params, {kid: this.getKeyId()});
+    }
+    return this.get(url);
+  }
+
+  public async finalize(url: string, params: IFinalize): Promise<IPostResult<IOrder>> {
+    return this.post(url, params, {kid: this.getKeyId()});
+  }
+
   public async getAuthorization(url: string, method: Method = "post"): Promise<IPostResult<IAuthorization>> {
     if (method === "post") {
       return this.post(url, "", {kid: this.getKeyId()});
@@ -236,7 +247,6 @@ export class AcmeClient {
       payload: parts[1],
       signature: parts[2],
     };
-    // console.log(`${res.protected}.${res.payload}.${res.signature}`);
     return res;
   }
 

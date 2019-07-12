@@ -22,3 +22,7 @@ export interface INewOrder {
   notAfter?: string;
   notBefore?: string;
 }
+
+export interface IFinalize {
+  csr: string;
+}

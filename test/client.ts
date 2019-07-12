@@ -9,12 +9,14 @@ import {AcmeClient} from "../src/client";
 import {crypto} from "../src/crypto";
 import {IOrder} from "../src/types";
 import {IAuthorization, IChallenge, IHttpChallenge} from "../src/types/authorization";
+import {generateCSR} from "./csr";
 
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
 
 const urlServer = {
   ACME: "https://aeg-dev0-srv.aegdomain2.com/acme/directory",
-  domain: "http://aeg-dev0-srv.aegdomain2.com/acme-challenge",
+  test: "http://aeg-dev0-srv.aegdomain2.com/acme-challenge",
+  domain: "aeg-dev0-srv.aegdomain2.com",
   LetSEncrypt: "https://acme-staging-v02.api.letsencrypt.org/directory",
   local: "http://localhost:60298/directory",
 };
@@ -84,8 +86,8 @@ context(`Client ${url}`, () => {
       assert.equal(res.error.type, "urn:ietf:params:acme:error:accountDoesNotExist");
     });
 
-    // mailto
-    // validate email
+    // todo: mailto
+    // todo: validate email
 
     it("create account", async () => {
       const res = await client.createAccount({
@@ -135,7 +137,7 @@ context(`Client ${url}`, () => {
       if (!res.error) {
         throw new Error("No Error");
       }
-      assert.equal(res.headers.has("location"), true);
+      // assert.equal(res.headers.has("location"), true);
       assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.status, 409);
       assert.equal(res.error.status, 409);
@@ -161,11 +163,11 @@ context(`Client ${url}`, () => {
     let authorization: IAuthorization;
     let challengeHttp: IChallenge;
 
-    before(async () => {
-      const acmeKey = process.env.ACME_KEY;
-      assert.equal(!!acmeKey, true, "Environment variable ACME_KEY does not exist");
-      authKey = await crypto.subtle.importKey("pkcs8", Buffer.from(acmeKey!, "base64"), rsaAlg, true, ["sign"]);
-    });
+    // before(async () => {
+    //   const acmeKey = process.env.ACME_KEY;
+    //   assert.equal(!!acmeKey, true, "Environment variable ACME_KEY does not exist");
+    //   authKey = await crypto.subtle.importKey("pkcs8", Buffer.from(acmeKey!, "base64"), rsaAlg, true, ["sign"]);
+    // });
 
     before(async () => {
       client = new AcmeClient({authKey});
@@ -200,7 +202,7 @@ context(`Client ${url}`, () => {
       assert.equal(res.error.status, 400);
     });
 
-    it.only("create order", async () => {
+    it("create order", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       const params: any = {
@@ -211,7 +213,6 @@ context(`Client ${url}`, () => {
         params.notBefore = new Date().toISOString();
       }
       const res = await client.newOrder(params);
-      console.log(res);
       assert.equal(res.headers.has("link"), true);
       assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.status, 201);
@@ -234,8 +235,9 @@ context(`Client ${url}`, () => {
       const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
       const account = await client.createAccount({onlyReturnExisting: true});
       const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
+      // const json = JSON.stringify(account.result.key, Object.keys(account.result));
       await client.createURL(
-        urlServer.domain, challange.token,
+        urlServer.test, challange.token,
         Convert.ToBase64Url(await crypto.subtle.digest("SHA-256", Buffer.from(json))),
       );
     });
@@ -257,10 +259,57 @@ context(`Client ${url}`, () => {
       assert.equal(challange.status, "valid");
     });
 
-    // order ready
+    it("authorization valid", async () => {
+      const res = await client.getAuthorization(order.authorizations[0]);
+      assert.equal(res.headers.has("link"), true);
+      // assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(res.status, 200);
+      assert.equal(res.result.status, "valid");
+      assert.equal(!!res.result.expires, true);
+      assert.equal(!!res.result.identifier, true);
+      assert.equal(!!res.result.challenges, true);
+      authorization = res.result;
+    });
+
+    it("order ready", async () => {
+      const params: any = {
+        identifiers: [{type: "dns", value: "aeg-dev0-srv.aegdomain2.com"}],
+      };
+      const res = await client.newOrder(params);
+      assert.equal(res.headers.has("link"), true);
+      assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(res.status, 201);
+      assert.equal(res.result.status, "ready");
+      assert.equal(!!res.result.expires, true);
+      assert.equal(!!res.result.authorizations, true);
+      order = res.result;
+    });
 
     it("finalize", async () => {
+      const csr = await generateCSR(rsaAlg, "aeg-dev0-srv.aegdomain2.com");
+      if (!order.finalize) {
+        throw new Error("finalize link undefined");
+      }
+      const res = await client.finalize(order.finalize, {csr: Convert.ToBase64Url(csr.csr)});
+      assert.equal(res.headers.has("link"), true);
+      assert.equal(res.headers.has("location"), true);
+      assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(res.status, 200);
+      assert.equal(res.result.status, "valid");
+      assert.equal(!!res.result.expires, true);
+      assert.equal(!!res.result.authorizations, true);
+      assert.equal(!!res.result.certificate, true);
+      order = res.result;
+    });
 
+    it("certificate", async () => {
+      if (!order.certificate) {
+        throw new Error("certificate link undefined");
+      }
+      const res = await fetch(order.certificate, {method: "GET"});
+      assert.equal(res.headers.has("link"), true);
+      assert.equal(res.status, 200);
+      assert.equal(!!(await res.text()), true);
     });
 
   });
@@ -279,7 +328,6 @@ context(`Client ${url}`, () => {
   }
 });
 
-
 async function pause(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-} 
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
