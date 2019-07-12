@@ -197,10 +197,7 @@ export class AcmeClient {
     return this.get(url);
   }
 
-  public async request<T>(url: string, method: Method = "post", params = {}): Promise<IPostResult<T>> {
-    if (method === "post") {
-      return this.post(url, params, {kid: this.getKeyId()});
-    }
+  public async getCertificate(url: string): Promise<IPostResult<string>> {
     return this.get(url);
   }
 
