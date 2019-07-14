@@ -5,7 +5,7 @@ import * as core from "webcrypto-core";
 import {crypto} from "./crypto";
 import {
   Base64UrlString, IAccount, ICreateAccount,
-  IDirectory, IError, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount, IFinalize,
+  IDirectory, IError, IFinalize, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
 } from "./types";
 import {IAuthorization, IChallenge, IHttpChallenge} from "./types/authorization";
 
@@ -212,6 +212,11 @@ export class AcmeClient {
     return this.get(url);
   }
 
+  /**
+   * Создание JWS
+   * @param payload 
+   * @param options 
+   */
   public async createJWS(payload: any, options: ICreateJwsOptions) {
     const key = options.key || this.authKey.key;
     const keyPem = await this.getKeyPem(key);

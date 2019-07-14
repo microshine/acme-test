@@ -1,11 +1,11 @@
 import "colors";
 import fetch from "node-fetch";
 import {Convert} from "pvtsutils";
+import {PemConverter} from "webcrypto-core";
 import {crypto} from "../src/crypto";
 import {generateCSR} from "../test/csr";
 import {AcmeClient} from "./client";
 import {IHttpChallenge} from "./types/authorization";
-import {PemConverter} from "webcrypto-core";
 
 export interface ICetrOptions {
   url: string;
@@ -72,7 +72,7 @@ export async function getCertificate(options: ICetrOptions) {
   }
   console.log("PRIVATE KEY".green, PemConverter.fromBufferSource(privateKey, "PRIVATE KEY"));
   console.log("PUBLIC KEY".green, PemConverter.fromBufferSource(publicKey, "PUBLIC KEY"));
-  console.log("END-ENTITY".green, matches[1]);
+  console.log("CERT".green, matches[1]);
 }
 
 const test: ICetrOptions = {

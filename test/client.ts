@@ -170,6 +170,11 @@ context(`Client ${url}`, () => {
     // });
 
     before(async () => {
+      const keys = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
+      authKey = keys.privateKey;
+    });
+
+    before(async () => {
       client = new AcmeClient({authKey});
       await client.initialize(url);
     });
@@ -202,7 +207,7 @@ context(`Client ${url}`, () => {
       assert.equal(res.error.status, 400);
     });
 
-    it("create order", async () => {
+    it.only("create order", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       const params: any = {
@@ -220,10 +225,13 @@ context(`Client ${url}`, () => {
       assert.equal(!!res.result.expires, true);
       assert.equal(!!res.result.authorizations, true);
       order = res.result;
+      console.log("ORDER_1", res.headers.get("location"));
+      console.log("ORDER_1", order);
     });
 
-    it("authorization", async () => {
+    it.only("authorization", async () => {
       const res = await client.getAuthorization(order.authorizations[0]);
+      console.log("AUTHORIZATION_1", res.result);
       assert.equal(res.headers.has("link"), true);
       // assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.status, 200);
@@ -234,8 +242,8 @@ context(`Client ${url}`, () => {
       authorization = res.result;
       const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
       const account = await client.createAccount({onlyReturnExisting: true});
+      // const json = JSON.stringify(account.result.key, Object.keys(account.result.key));
       const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
-      // const json = JSON.stringify(account.result.key, Object.keys(account.result));
       await client.createURL(
         urlServer.test, challange.token,
         Convert.ToBase64Url(await crypto.subtle.digest("SHA-256", Buffer.from(json))),
@@ -247,16 +255,17 @@ context(`Client ${url}`, () => {
       assert.equal(challange.status, "pending");
     });
 
-    it("challange http-01 valid", async () => {
-      let challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
-      await client.getChallenge(challange.url, "post");
+    it.only("challange http-01 valid", async () => {
+      let challenge = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
+      await client.getChallenge(challenge.url, "post");
       let count = 0;
-      while (challange.status === "pending" && count++ < 5) {
+      while (challenge.status === "pending" && count++ < 5) {
         await pause(2000);
-        const res = await client.getChallenge(challange.url, "get");
-        challange = res.result;
+        const res = await client.getChallenge(challenge.url, "get");
+        challenge = res.result;
       }
-      assert.equal(challange.status, "valid");
+      console.log("CHALLENGE_1", challenge);
+      assert.equal(challenge.status, "valid");
     });
 
     it("authorization valid", async () => {
@@ -271,11 +280,15 @@ context(`Client ${url}`, () => {
       authorization = res.result;
     });
 
-    it("order ready", async () => {
+    it.only("order ready", async () => {
       const params: any = {
         identifiers: [{type: "dns", value: "aeg-dev0-srv.aegdomain2.com"}],
       };
       const res = await client.newOrder(params);
+      console.log("ORDER_1", res.headers.get("location"));
+      console.log("ORDER_2", res.result);
+      const res2 = await client.getAuthorization(res.result.authorizations[0]);
+      console.log("AUTHORIZATION_2", res2.result);
       assert.equal(res.headers.has("link"), true);
       assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.status, 201);
