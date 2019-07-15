@@ -1,6 +1,8 @@
+import "colors";
 import jws from "jws";
 import {Response} from "node-fetch";
 import fetch from "node-fetch";
+import * as util from "util";
 import * as core from "webcrypto-core";
 import {crypto} from "./crypto";
 import {AcmeError} from "./error";
@@ -15,6 +17,7 @@ export interface IAcmeClientOptions {
    * Private key for authentication
    */
   authKey: CryptoKey;
+  debug?: boolean;
 }
 
 export interface ICreateJwsOptions {
@@ -36,7 +39,6 @@ export interface IPostResult<T = any> extends IHeaders {
 export interface IHeaders {
   link?: string | string[];
   location?: string;
-  order?: string;
 }
 
 export interface IAuthKey {
@@ -51,11 +53,13 @@ export class AcmeClient {
   public lastNonce: string = "";
   public directory?: IDirectory;
   private authKey: IAuthKey;
+  private debug: boolean;
 
   constructor(options: IAcmeClientOptions) {
     this.authKey = {
       key: options.authKey,
     };
+    this.debug = !!options.debug;
   }
 
   public async initialize(url: string) {
@@ -141,6 +145,7 @@ export class AcmeClient {
         },
         body: JSON.stringify(token),
       });
+      this.lastNonce = response.headers.get("replay-nonce") || "";
     } else {
       response = await fetch(url, {method});
     }
@@ -152,22 +157,29 @@ export class AcmeClient {
       // TODO: throw exception
       // TODO: Detect ACME exception
       const error = await response.text();
-      this.lastNonce = response.headers.get("replay-nonce") || "";
       let errJson: any;
       try {
         errJson = JSON.parse(error);
+        this.logResponse(url, errJson, method);
       } catch {
         throw new Error(error);
       }
       throw new AcmeError(errJson);
     }
-    this.lastNonce = this.getNonce(response);
-
+    let result: any;
+    if (response.headers.get("content-type") === "application/pem-certificate-chain") {
+      result = await response.text();
+    } else {
+      result = await response.json();
+    }
     const res: IPostResult = {
       status: response.status,
       ...headers,
-      result: await response.json(),
+      result,
     };
+
+    this.logResponse(url, res, method);
+
     return res;
   }
 
@@ -178,13 +190,9 @@ export class AcmeClient {
   public async getChallenge(url: string, method: Method = "GET") {
     const res = await this.request<IHttpChallenge>(url, method, {});
     if (method === "POST") {
-     await this.pause(2000);
+      await this.pause(2000);
     }
     return res;
-  }
-
-  public async getCertificate(url: string) {
-    return this.request<string>(url);
   }
 
   public async getFinalize(url: string, params: IFinalize) {
@@ -195,6 +203,23 @@ export class AcmeClient {
     return this.request<IAuthorization>(url, method, "");
   }
 
+  public async getCertificate(url: string) {
+    const response = await this.request<string>(url);
+    const certs: string[] = [];
+    const regex = /(-----BEGIN CERTIFICATE-----[a-z0-9\/+=\n]+-----END CERTIFICATE-----)/gmis;
+    let matches: RegExpExecArray | null = null;
+    while (matches = regex.exec(response.result)) {
+      certs.push(matches[1]);
+    }
+    const res: IPostResult<string[]> = {
+      link: response.link,
+      location: response.location,
+      result: certs,
+      status: response.status,
+    };
+    return res;
+  }
+
   /**
    * Создание JWS
    * @param payload 
@@ -202,11 +227,15 @@ export class AcmeClient {
    */
   public async createJWS(payload: any, options: ICreateJwsOptions) {
     const key = options.key || this.authKey.key;
-    const keyPem = await this.getKeyPem(key);
+    const keyPem = key.algorithm.name === "HMAC"
+      ? Buffer.from(await crypto.subtle.exportKey("raw", key))
+      : await this.getKeyPem(key);
     const header: jws.Header = {
       alg: (key.algorithm.name === "ECDSA"
         ? `ES${(key.algorithm as EcKeyAlgorithm).namedCurve.replace("P-", "")}`
-        : "RS256") as any,
+        : key.algorithm.name === "HMAC"
+          ? "HS256"
+          : "RS256") as any,
     };
     if (!options.kid) {
       const jwk = await this.exportPublicKey(key);
@@ -242,12 +271,13 @@ export class AcmeClient {
     return this.authKey.id;
   }
 
-  private async exportPublicKey(key: CryptoKey) {
-    let jwk = await crypto.subtle.exportKey("jwk", key);
+  public async exportPublicKey(key?: CryptoKey) {
+    key = key || this.authKey.key;
+    let jwk = await crypto.subtle.exportKey("jwk", key || this.authKey.key);
     delete jwk.d;
     const publicKey = await crypto.subtle.importKey("jwk", jwk, key.algorithm as any, true, ["verify"]);
     jwk = await crypto.subtle.exportKey("jwk", publicKey);
-    delete jwk.alg;
+    // delete jwk.alg;
     return jwk;
   }
 
@@ -277,4 +307,10 @@ export class AcmeClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  private logResponse(url: string, res: any, method: string) {
+    if (this.debug) {
+      console.log(`${method} RESPONSE ${url}`.blue);
+      console.log("Result", res);
+    }
+  }
 }

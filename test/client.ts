@@ -13,7 +13,7 @@ import {generateCSR} from "./csr";
 
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
 
-const urlServer = {
+export const urlServer = {
   ACME: "https://aeg-dev0-srv.aegdomain2.com/acme/directory",
   test: "http://aeg-dev0-srv.aegdomain2.com/acme-challenge",
   domain: "aeg-dev0-srv.aegdomain2.com",
@@ -58,7 +58,7 @@ context(`Client ${url}`, () => {
       await client.initialize(url);
     });
 
-    it.only("Error: no agreement to the terms", async () => {
+    it("Error: no agreement to the terms", async () => {
       await assert.rejects(client.createAccount({
         contact: ["mailto:microshine@mail.ru"],
         termsOfServiceAgreed: false,
@@ -70,7 +70,7 @@ context(`Client ${url}`, () => {
       });
     });
 
-    it.only("Error: find not exist account", async () => {
+    it("Error: find not exist account", async () => {
       await assert.rejects(client.createAccount({
         contact: ["mailto:microshine@mail.ru"],
         onlyReturnExisting: true,
@@ -78,6 +78,7 @@ context(`Client ${url}`, () => {
         assert.equal(!!client.lastNonce, true);
         assert.equal(err.status, 400);
         assert.equal(err.type, "urn:ietf:params:acme:error:accountDoesNotExist");
+        return true;
       });
     });
 
@@ -129,6 +130,7 @@ context(`Client ${url}`, () => {
         assert.equal(!!client.lastNonce, true);
         assert.equal(err.status, 409);
         assert.equal(err.type, "urn:ietf:params:acme:error:incorrectResponse");
+        return true;
       });
     });
 
@@ -190,6 +192,7 @@ context(`Client ${url}`, () => {
           assert.equal(!!client.lastNonce, true);
           // assert.equal(res.error.type, "urn:ietf:params:acme:error:malformed");
           assert.equal(err.status, 400);
+          return true;
         });
     });
 
@@ -226,6 +229,7 @@ context(`Client ${url}`, () => {
       const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
       const account = await client.createAccount({onlyReturnExisting: true});
       // const json = JSON.stringify(account.result.key, Object.keys(account.result.key));
+      delete account.result.key.alg;
       const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
       await client.createURL(
         urlServer.test, challange.token,

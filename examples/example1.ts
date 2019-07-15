@@ -1,13 +1,12 @@
 import "colors";
-import fetch from "node-fetch";
 import {Convert} from "pvtsutils";
 import {PemConverter} from "webcrypto-core";
+import {AcmeClient} from "../src/client";
 import {crypto} from "../src/crypto";
+import {IHttpChallenge} from "../src/types/authorization";
 import {generateCSR} from "../test/csr";
-import {AcmeClient} from "./client";
-import {IHttpChallenge} from "./types/authorization";
 
-export interface ICetrOptions {
+export interface ICertificateOptions {
   url: string;
   domain: string;
   keys?: CryptoKeyPair;
@@ -16,7 +15,7 @@ export interface ICetrOptions {
   yearsValid?: number;
 }
 
-export async function getCertificate(options: ICetrOptions) {
+export async function main(options: ICertificateOptions) {
   if (!options.algorithm) {
     options.algorithm = {
       name: "RSASSA-PKCS1-v1_5",
@@ -57,6 +56,7 @@ export async function getCertificate(options: ICetrOptions) {
   const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
 
   //#region создание ссылки на тестовом сервере
+  delete account.result.key.alg;
   const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
   await client.createURL(
     "http://aeg-dev0-srv.aegdomain2.com/acme-challenge", challange.token,
@@ -70,29 +70,22 @@ export async function getCertificate(options: ICetrOptions) {
   if (!finalize.certificate) {
     throw new Error("No certificate link");
   }
-  const res = await fetch(finalize.certificate, {method: "GET"});
-  const certs = await res.text();
+  const res = await client.getCertificate(finalize.certificate);
   const privateKey = await crypto.subtle.exportKey("pkcs8", options.keys.privateKey);
   const publicKey = await crypto.subtle.exportKey("spki", options.keys.publicKey);
-
-  const regex = /(-----BEGIN CERTIFICATE-----[a-z0-9\/+=\n]+-----END CERTIFICATE-----)/gmis;
-  const matches = regex.exec(certs);
-  if (!matches) {
-    throw new Error("Not come certificate");
-  }
   console.log("PRIVATE KEY".yellow);
   console.log(PemConverter.fromBufferSource(privateKey, "PRIVATE KEY"));
   console.log("PUBLIC KEY".yellow);
   console.log(PemConverter.fromBufferSource(publicKey, "PUBLIC KEY"));
   console.log("Link for download cert:".yellow, finalize.certificate);
   console.log("CERT".yellow);
-  console.log(matches[1]);
+  console.log(res.result[0]);
 }
 
-const test: ICetrOptions = {
+const test: ICertificateOptions = {
   url: "https://acme-staging-v02.api.letsencrypt.org/directory",
   domain: "aeg-dev0-srv.aegdomain2.com",
   contact: ["mailto:microshine@mail.ru"],
 };
 
-getCertificate(test);
+main(test).catch((err) => console.error(err));
