@@ -1,22 +1,19 @@
 import {URL} from "./directory";
+import { IToken } from "./token";
 
 export interface IAccount {
   status: "valid" | "deactivated" | "revoked";
   contact?: string[];
   termsOfServiceAgreed?: boolean;
   orders: URL;
-  key: {
-    e: string;
-    kty: string;
-    n: string;
-  };
+  key: JsonWebKey;
 }
 
 export interface ICreateAccount {
   contact?: string[];
   termsOfServiceAgreed?: boolean;
   onlyReturnExisting?: boolean;
-  externalAccountBinding?: object;
+  externalAccountBinding?: IToken;
 }
 
 export interface IUpdateAccount {
