@@ -2,13 +2,13 @@
 import {config as env} from "dotenv";
 env();
 import * as assert from "assert";
-import {Headers} from "node-fetch";
 import fetch from "node-fetch";
 import {Convert} from "pvtsutils";
-import {AcmeClient} from "../src/client";
+import {AcmeClient, IHeaders} from "../src/client";
 import {crypto} from "../src/crypto";
+import {AcmeError} from "../src/error";
 import {IOrder} from "../src/types";
-import {IAuthorization, IChallenge, IHttpChallenge} from "../src/types/authorization";
+import {IAuthorization, IHttpChallenge} from "../src/types/authorization";
 import {generateCSR} from "./csr";
 
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
@@ -58,32 +58,27 @@ context(`Client ${url}`, () => {
       await client.initialize(url);
     });
 
-    it("Error: no agreement to the terms", async () => {
-      const res = await client.createAccount({
+    it.only("Error: no agreement to the terms", async () => {
+      await assert.rejects(client.createAccount({
         contact: ["mailto:microshine@mail.ru"],
         termsOfServiceAgreed: false,
+      }), (err: AcmeError) => {
+        assert.equal(!!client.lastNonce, true);
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
+        return true;
       });
-      if (!res.error) {
-        throw new Error("No Error");
-      }
-      assert.equal(res.headers.has("replay-nonce"), true);
-      assert.equal(res.error.status, 400);
-      assert.equal(res.status, 400);
-      assert.equal(res.error.type, "urn:ietf:params:acme:error:malformed");
     });
 
-    it("Error: find not exist account", async () => {
-      const res = await client.createAccount({
+    it.only("Error: find not exist account", async () => {
+      await assert.rejects(client.createAccount({
         contact: ["mailto:microshine@mail.ru"],
         onlyReturnExisting: true,
+      }), (err: AcmeError) => {
+        assert.equal(!!client.lastNonce, true);
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:accountDoesNotExist");
       });
-      if (!res.error) {
-        throw new Error("No Error");
-      }
-      assert.equal(res.headers.has("replay-nonce"), true);
-      assert.equal(res.error.status, 400);
-      assert.equal(res.status, 400);
-      assert.equal(res.error.type, "urn:ietf:params:acme:error:accountDoesNotExist");
     });
 
     // todo: mailto
@@ -94,7 +89,7 @@ context(`Client ${url}`, () => {
         contact: ["mailto:microshine@mail.ru"],
         termsOfServiceAgreed: true,
       });
-      checkHeaders(res.headers);
+      checkHeaders(res);
       checkResAccount(res, 201);
     });
 
@@ -103,51 +98,44 @@ context(`Client ${url}`, () => {
         contact: ["mailto:microshine2@mail.ru"],
         termsOfServiceAgreed: true,
       });
-      checkHeaders(res.headers);
+      checkHeaders(res);
       checkResAccount(res, 200);
     });
 
     it("finding an account", async () => {
       const res = await client.createAccount({onlyReturnExisting: true});
-      checkHeaders(res.headers);
+      checkHeaders(res);
       checkResAccount(res, 200);
     });
 
     it("account update", async () => {
       const res = await client.updateAccount({contact: ["mailto:testmail@mail.ru"]});
-      assert.equal(res.headers.has("link"), true);
-      assert.equal(res.headers.has("replay-nonce"), true);
-      assert.equal(res.result.status, "valid");
-      assert.equal(res.status, 200);
-      if (url !== urlServer.LetSEncrypt) {
-        assert.equal(!!res.result.orders, true);
-      }
+      assert.equal(!!res.link, true);
+      assert.equal(!!client.lastNonce, true);
+      checkResAccount(res, 200);
     });
 
     it("account key rollover", async () => {
       const newKey = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
       const res = await client.changeKey(newKey.privateKey);
-      assert.equal(res.headers.has("link"), true);
-      assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(!!res.link, true);
+      assert.equal(!!client.lastNonce, true);
       checkResAccount(res, 200);
     });
 
     it("Error: account key rollover", async () => {
-      const res = await client.changeKey();
-      if (!res.error) {
-        throw new Error("No Error");
-      }
-      // assert.equal(res.headers.has("location"), true);
-      assert.equal(res.headers.has("replay-nonce"), true);
-      assert.equal(res.status, 409);
-      assert.equal(res.error.status, 409);
-      assert.equal(res.error.type, "urn:ietf:params:acme:error:incorrectResponse");
+      await assert.rejects(client.changeKey(), (err: AcmeError) => {
+        // assert.equal(res.headers.has("location"), true);
+        assert.equal(!!client.lastNonce, true);
+        assert.equal(err.status, 409);
+        assert.equal(err.type, "urn:ietf:params:acme:error:incorrectResponse");
+      });
     });
 
     it("deactivate", async () => {
       const res = await client.deactivate();
-      assert.equal(res.headers.has("link"), true);
-      assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(!!res.link, true);
+      assert.equal(!!client.lastNonce, true);
       assert.equal(res.result.status, "deactivated");
       assert.equal(res.status, 200);
       if (url !== urlServer.LetSEncrypt) {
@@ -161,7 +149,6 @@ context(`Client ${url}`, () => {
 
     let order: IOrder;
     let authorization: IAuthorization;
-    let challengeHttp: IChallenge;
 
     // before(async () => {
     //   const acmeKey = process.env.ACME_KEY;
@@ -180,10 +167,11 @@ context(`Client ${url}`, () => {
     });
 
     before(async () => {
-      const res = await client.createAccount({
-        onlyReturnExisting: true,
-      });
-      if (res.error) {
+      try {
+        await client.createAccount({
+          onlyReturnExisting: true,
+        });
+      } catch (error) {
         // create new account
         await client.createAccount({
           contact: ["mailto:microshine@mail.ru"],
@@ -195,19 +183,17 @@ context(`Client ${url}`, () => {
     it("Error: create order without required params", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
-      const res = await client.newOrder({
-        identifiers: [],
-      });
-      if (!res.error) {
-        throw new Error("No Error");
-      }
-      assert.equal(res.headers.has("replay-nonce"), true);
-      assert.equal(res.error.type, "urn:ietf:params:acme:error:malformed");
-      assert.equal(res.status, 400);
-      assert.equal(res.error.status, 400);
+      await assert.rejects(
+        client.newOrder({
+          identifiers: [],
+        }), (err: AcmeError) => {
+          assert.equal(!!client.lastNonce, true);
+          // assert.equal(res.error.type, "urn:ietf:params:acme:error:malformed");
+          assert.equal(err.status, 400);
+        });
     });
 
-    it.only("create order", async () => {
+    it("create order", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       const params: any = {
@@ -218,21 +204,18 @@ context(`Client ${url}`, () => {
         params.notBefore = new Date().toISOString();
       }
       const res = await client.newOrder(params);
-      assert.equal(res.headers.has("link"), true);
-      assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(!!res.link, true);
+      assert.equal(!!client.lastNonce, true);
       assert.equal(res.status, 201);
       assert.equal(res.result.status, "pending");
       assert.equal(!!res.result.expires, true);
       assert.equal(!!res.result.authorizations, true);
       order = res.result;
-      console.log("ORDER_1", res.headers.get("location"));
-      console.log("ORDER_1", order);
     });
 
-    it.only("authorization", async () => {
+    it("authorization", async () => {
       const res = await client.getAuthorization(order.authorizations[0]);
-      console.log("AUTHORIZATION_1", res.result);
-      assert.equal(res.headers.has("link"), true);
+      assert.equal(!!res.link, true);
       // assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.status, 200);
       assert.equal(res.result.status, "pending");
@@ -255,22 +238,21 @@ context(`Client ${url}`, () => {
       assert.equal(challange.status, "pending");
     });
 
-    it.only("challange http-01 valid", async () => {
+    it("challange http-01 valid", async () => {
       let challenge = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
-      await client.getChallenge(challenge.url, "post");
+      await client.getChallenge(challenge.url, "POST");
       let count = 0;
       while (challenge.status === "pending" && count++ < 5) {
         await pause(2000);
-        const res = await client.getChallenge(challenge.url, "get");
+        const res = await client.getChallenge(challenge.url, "GET");
         challenge = res.result;
       }
-      console.log("CHALLENGE_1", challenge);
       assert.equal(challenge.status, "valid");
     });
 
     it("authorization valid", async () => {
       const res = await client.getAuthorization(order.authorizations[0]);
-      assert.equal(res.headers.has("link"), true);
+      assert.equal(!!res.link, true);
       // assert.equal(res.headers.has("replay-nonce"), true);
       assert.equal(res.status, 200);
       assert.equal(res.result.status, "valid");
@@ -280,17 +262,13 @@ context(`Client ${url}`, () => {
       authorization = res.result;
     });
 
-    it.only("order ready", async () => {
+    it("order ready", async () => {
       const params: any = {
         identifiers: [{type: "dns", value: "aeg-dev0-srv.aegdomain2.com"}],
       };
       const res = await client.newOrder(params);
-      console.log("ORDER_1", res.headers.get("location"));
-      console.log("ORDER_2", res.result);
-      const res2 = await client.getAuthorization(res.result.authorizations[0]);
-      console.log("AUTHORIZATION_2", res2.result);
-      assert.equal(res.headers.has("link"), true);
-      assert.equal(res.headers.has("replay-nonce"), true);
+      assert.equal(!!res.link, true);
+      assert.equal(!!client.lastNonce, true);
       assert.equal(res.status, 201);
       assert.equal(res.result.status, "ready");
       assert.equal(!!res.result.expires, true);
@@ -303,10 +281,8 @@ context(`Client ${url}`, () => {
       if (!order.finalize) {
         throw new Error("finalize link undefined");
       }
-      const res = await client.finalize(order.finalize, {csr: Convert.ToBase64Url(csr.csr)});
-      assert.equal(res.headers.has("link"), true);
-      assert.equal(res.headers.has("location"), true);
-      assert.equal(res.headers.has("replay-nonce"), true);
+      const res = await client.getFinalize(order.finalize, {csr: Convert.ToBase64Url(csr.csr)});
+      checkHeaders(res);
       assert.equal(res.status, 200);
       assert.equal(res.result.status, "valid");
       assert.equal(!!res.result.expires, true);
@@ -327,10 +303,10 @@ context(`Client ${url}`, () => {
 
   });
 
-  function checkHeaders(headers: Headers) {
-    assert.equal(headers.has("link"), true);
-    assert.equal(headers.has("location"), true);
-    assert.equal(headers.has("replay-nonce"), true);
+  function checkHeaders(headers: IHeaders) {
+    assert.equal(!!headers.link, true);
+    assert.equal(!!headers.location, true);
+    assert.equal(!!client.lastNonce, true);
   }
   function checkResAccount(res: any, status: number) {
     assert.equal(res.result.status, "valid");

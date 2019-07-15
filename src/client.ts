@@ -1,13 +1,14 @@
 import jws from "jws";
-import {Headers, Response} from "node-fetch";
+import {Response} from "node-fetch";
 import fetch from "node-fetch";
 import * as core from "webcrypto-core";
 import {crypto} from "./crypto";
+import {AcmeError} from "./error";
 import {
   Base64UrlString, IAccount, ICreateAccount,
-  IDirectory, IError, IFinalize, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
+  IDirectory, IFinalize, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
 } from "./types";
-import {IAuthorization, IChallenge, IHttpChallenge} from "./types/authorization";
+import {IAuthorization, IHttpChallenge} from "./types/authorization";
 
 export interface IAcmeClientOptions {
   /**
@@ -27,11 +28,15 @@ export interface IGetOptions {
   hostname?: string;
 }
 
-export interface IPostResult<T = any> {
+export interface IPostResult<T = any> extends IHeaders {
   status: number;
   result: T;
-  error?: IError;
-  headers: Headers;
+}
+
+export interface IHeaders {
+  link?: string | string[];
+  location?: string;
+  order?: string;
 }
 
 export interface IAuthKey {
@@ -39,12 +44,12 @@ export interface IAuthKey {
   id?: Base64UrlString;
 }
 
-type Method = "post" | "get";
+type Method = "POST" | "GET";
 
 export class AcmeClient {
 
-  private directory?: IDirectory;
-  private lastNonce: string = "";
+  public lastNonce: string = "";
+  public directory?: IDirectory;
   private authKey: IAuthKey;
 
   constructor(options: IAcmeClientOptions) {
@@ -54,51 +59,44 @@ export class AcmeClient {
   }
 
   public async initialize(url: string) {
-    const response = await fetch(url, {
-      method: "GET",
-    });
+    const response = await fetch(url, {method: "GET"});
     this.directory = await response.json();
     return this.directory;
   }
 
   public async nonce() {
-    const response = await fetch(this.getDirectory().newNonce, {
-      method: "GET",
-    });
+    const response = await fetch(this.getDirectory().newNonce, {method: "GET"});
     return this.getNonce(response);
   }
 
-  public async createAccount(params: ICreateAccount): Promise<IPostResult<IAccount>> {
-    const res = await this.post(this.getDirectory().newAccount, params);
-    if (!res.error) {
-      const location = res.headers.get("location");
-      if (!location) {
-        throw new Error("Cannot get Location header");
-      }
-      this.authKey.id = location;
+  public async createAccount(params: ICreateAccount) {
+    const res = await this.request<IAccount>(this.getDirectory().newAccount, "POST", params, false);
+    if (!res.location) {
+      throw new Error("Cannot get Location header");
     }
+    this.authKey.id = res.location;
     return res;
   }
 
-  public async updateAccount(params: IUpdateAccount): Promise<IPostResult<IAccount>> {
-    return this.post(this.getKeyId(), params, {kid: this.getKeyId()});
+  public async updateAccount(params: IUpdateAccount) {
+    return this.request<IAccount>(this.getKeyId(), "POST", params);
   }
 
-  public async changeKey(key?: CryptoKey): Promise<IPostResult<IAccount>> {
+  public async changeKey(key?: CryptoKey) {
     const keyChange: IKeyChange = {
       account: this.getKeyId(),
       oldKey: await this.exportPublicKey(this.authKey.key),
     };
     const innerToken = await this.createJWS(keyChange, {omitNonce: true, url: this.getDirectory().keyChange, key});
-    const res = await this.post(this.getDirectory().keyChange, innerToken, {kid: this.getKeyId()});
-    if (!res.error) {
-      this.authKey.key = key!;
+    const res = await this.request<IAccount>(this.getDirectory().keyChange, "POST", innerToken);
+    if (key) {
+      this.authKey.key = key;
     }
     return res;
   }
 
-  public async deactivate(): Promise<IPostResult<IAccount>> {
-    return this.post(this.getKeyId(), {status: "deactivated"}, {kid: this.getKeyId()});
+  public async deactivate() {
+    return this.request<IAccount>(this.getKeyId(), "POST", {status: "deactivated"});
   }
 
   public async createURL(url: string, id: string, token: string) {
@@ -115,101 +113,86 @@ export class AcmeClient {
     }
   }
 
-  public async post(url: string, params: any, options?: ICreateJwsOptions) {
-    if (!this.lastNonce) {
-      this.lastNonce = await this.nonce();
+  /**
+   * Запрос на сервер
+   * @param url адресс сервера
+   * @param method default "GET"
+   * @param params 
+   * @param options 
+   * @param kid 
+   */
+  public async request<T>(
+    url: string,
+    method: Method = "GET",
+    params?: any,
+    kid: boolean = true): Promise<IPostResult<T>> {
+    let response: Response;
+    if (method === "POST") {
+      if (!this.lastNonce) {
+        this.lastNonce = await this.nonce();
+      }
+      const token = kid
+        ? await this.createJWS(params, Object.assign({url}, {kid: this.getKeyId()}))
+        : await this.createJWS(params, Object.assign({url}));
+      response = await fetch(url, {
+        method,
+        headers: {
+          "content-type": "application/jose+json",
+        },
+        body: JSON.stringify(token),
+      });
+    } else {
+      response = await fetch(url, {method});
     }
-
-    const token = await this.createJWS(params, Object.assign({url}, options));
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/jose+json",
-      },
-      body: JSON.stringify(token),
-    });
-
+    const headers: IHeaders = {
+      link: response.headers.get("link") || undefined,
+      location: response.headers.get("location") || undefined,
+    };
     if (!(response.status >= 200 && response.status < 300)) {
       // TODO: throw exception
       // TODO: Detect ACME exception
       const error = await response.text();
       this.lastNonce = response.headers.get("replay-nonce") || "";
+      let errJson: any;
       try {
-        const errJson = JSON.parse(error);
-        const errRes: IPostResult = {
-          headers: response.headers,
-          error: errJson,
-          status: response.status,
-          result: null,
-        };
-        return errRes;
+        errJson = JSON.parse(error);
       } catch {
         throw new Error(error);
       }
+      throw new AcmeError(errJson);
     }
     this.lastNonce = this.getNonce(response);
-    const json = await response.json();
+
     const res: IPostResult = {
-      headers: response.headers,
-      result: json,
       status: response.status,
+      ...headers,
+      result: await response.json(),
     };
     return res;
   }
 
-  public async get(url: string) {
-    const response = await fetch(url, {method: "get"});
-    if (!(response.status >= 200 && response.status < 300)) {
-      // TODO: throw exception
-      // TODO: Detect ACME exception
-      const error = await response.text();
-      this.lastNonce = response.headers.get("replay-nonce") || "";
-      try {
-        const errJson = JSON.parse(error);
-        const errRes: IPostResult = {
-          headers: response.headers,
-          error: errJson,
-          status: response.status,
-          result: null,
-        };
-        return errRes;
-      } catch {
-        throw new Error(error);
-      }
+  public async newOrder(params: INewOrder) {
+    return this.request<IOrder>(this.getDirectory().newOrder, "POST", params);
+  }
+
+  public async getChallenge(url: string, method: Method = "GET") {
+    const res = await this.request<IHttpChallenge>(url, method, {});
+    if (method === "POST") {
+     await this.pause(2000);
     }
-    const json = await response.json();
-    const res: IPostResult = {
-      headers: response.headers,
-      result: json,
-      status: response.status,
-    };
     return res;
   }
 
-  public async newOrder(params: INewOrder): Promise<IPostResult<IOrder>> {
-    return this.post(this.getDirectory().newOrder, params, {kid: this.getKeyId()});
+  public async getCertificate(url: string) {
+    return this.request<string>(url);
   }
 
-  public async getChallenge(url: string, method: Method = "post"): Promise<IPostResult<IHttpChallenge>> {
-    if (method === "post") {
-      return this.post(url, {}, {kid: this.getKeyId()});
-    }
-    return this.get(url);
+  public async getFinalize(url: string, params: IFinalize) {
+    return this.request<IOrder>(url, "POST", params);
   }
 
-  public async getCertificate(url: string): Promise<IPostResult<string>> {
-    return this.get(url);
-  }
-
-  public async finalize(url: string, params: IFinalize): Promise<IPostResult<IOrder>> {
-    return this.post(url, params, {kid: this.getKeyId()});
-  }
-
-  public async getAuthorization(url: string, method: Method = "post"): Promise<IPostResult<IAuthorization>> {
-    if (method === "post") {
-      return this.post(url, "", {kid: this.getKeyId()});
-    }
-    return this.get(url);
+  public async getAuthorization(url: string, method: Method = "POST") {
+    return this.request<IAuthorization>(url, method, "");
   }
 
   /**
@@ -288,6 +271,10 @@ export class AcmeClient {
       throw new Error("Cannot get Replay-nonce header");
     }
     return res;
+  }
+
+  private async pause(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
 }

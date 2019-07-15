@@ -13,6 +13,7 @@ export interface ICetrOptions {
   keys?: CryptoKeyPair;
   algorithm?: RsaHashedKeyGenParams;
   contact: string[];
+  yearsValid?: number;
 }
 
 export async function getCertificate(options: ICetrOptions) {
@@ -26,25 +27,34 @@ export async function getCertificate(options: ICetrOptions) {
   }
   if (!options.keys) {
     options.keys = await crypto.subtle.generateKey(options.algorithm, true, ["sign", "verify"]);
+    console.log("Generated new keys: completed".yellow);
   }
-
   const client = new AcmeClient({authKey: options.keys.privateKey});
-  await client.initialize(options.url);
+  const directory = await client.initialize(options.url);
+  console.log("Directory:".yellow);
+  console.log(directory);
   const account = await client.createAccount({
     contact: options.contact,
     termsOfServiceAgreed: true,
   });
+  console.log("Account:".yellow);
+  console.log(account.result);
 
-  const date = new Date();
-  date.setFullYear(date.getFullYear() + 1);
   const params: any = {
     identifiers: [{type: "dns", value: options.domain}],
   };
-  // params.notAfter = date.toISOString();
-  // params.notBefore = new Date().toISOString();
-  let order = (await client.newOrder(params)).result;
-  const authorization = (await client.getAuthorization(order.authorizations[0])).result;
-  let challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
+  const date = new Date();
+  if (options.yearsValid) {
+    date.setFullYear(date.getFullYear() + options.yearsValid);
+    params.notAfter = date.toISOString();
+    params.notBefore = new Date().toISOString();
+  }
+  const order = (await client.newOrder(params));
+  console.log("Order link:".yellow, order.location);
+  const authorization = (await client.getAuthorization(order.result.authorizations[0])).result;
+  console.log("Authorization:".yellow);
+  console.log(authorization);
+  const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
 
   //#region создание ссылки на тестовом сервере
   const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
@@ -54,9 +64,9 @@ export async function getCertificate(options: ICetrOptions) {
   );
   //#endregion
 
-  await client.getChallenge(challange.url, "post");
+  await client.getChallenge(challange.url, "POST");
   const csr = await generateCSR(options.algorithm, options.domain);
-  const finalize = (await client.finalize(order.finalize, {csr: Convert.ToBase64Url(csr.csr)})).result;
+  const finalize = (await client.getFinalize(order.result.finalize, {csr: Convert.ToBase64Url(csr.csr)})).result;
   if (!finalize.certificate) {
     throw new Error("No certificate link");
   }
@@ -70,9 +80,13 @@ export async function getCertificate(options: ICetrOptions) {
   if (!matches) {
     throw new Error("Not come certificate");
   }
-  console.log("PRIVATE KEY".green, PemConverter.fromBufferSource(privateKey, "PRIVATE KEY"));
-  console.log("PUBLIC KEY".green, PemConverter.fromBufferSource(publicKey, "PUBLIC KEY"));
-  console.log("CERT".green, matches[1]);
+  console.log("PRIVATE KEY".yellow);
+  console.log(PemConverter.fromBufferSource(privateKey, "PRIVATE KEY"));
+  console.log("PUBLIC KEY".yellow);
+  console.log(PemConverter.fromBufferSource(publicKey, "PUBLIC KEY"));
+  console.log("Link for download cert:".yellow, finalize.certificate);
+  console.log("CERT".yellow);
+  console.log(matches[1]);
 }
 
 const test: ICetrOptions = {
