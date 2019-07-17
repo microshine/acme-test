@@ -19,7 +19,7 @@ export const urlServer = {
   globalSign: "https://aeg-dev0-srv.aegdomain2.com/acme/directory",
   LetSEncrypt: "https://acme-staging-v02.api.letsencrypt.org/directory",
 };
-const url = urlServer.LetSEncrypt;
+const url = urlServer.globalSign;
 let authKey: CryptoKey;
 let client: AcmeClient;
 let order: IOrder;
@@ -175,7 +175,7 @@ context(`Client ${url}`, () => {
 
   });
 
-  context("Order Managment", () => {
+  context.only("Order Managment", () => {
 
     before(async () => {
       await preparation(true);
@@ -228,6 +228,45 @@ context(`Client ${url}`, () => {
       const order2 = await client.newOrder(params2);
       assert.notEqual(order1.location, order2.location);
       assert.equal(order1.result.authorizations[0], order2.result.authorizations[0]);
+      assert.equal(order2.status, 201);
+    });
+    it("create new order with one of the  identifier", async () => {
+      const params1: any = {
+        identifiers: [
+          {type: "dns", value: "test3.com"},
+          {type: "dns", value: "test4.com"},
+        ],
+      };
+      const order1 = await client.newOrder(params1);
+      const params2: any = {
+        identifiers: [
+          {type: "dns", value: "test3.com"},
+        ],
+      };
+      const order2 = await client.newOrder(params2);
+      assert.notEqual(order1.location, order2.location);
+      assert.equal(order1.result.authorizations[0], order2.result.authorizations[0]);
+      assert.equal(order2.status, 201);
+    });
+
+    it("create new order with same identifiers", async () => {
+      const params1: any = {
+        identifiers: [
+          {type: "dns", value: "test1.com"},
+          {type: "dns", value: "test2.com"},
+        ],
+      };
+      const order1 = await client.newOrder(params1);
+      const params2: any = {
+        identifiers: [
+          {type: "dns", value: "test2.com"},
+          {type: "dns", value: "test1.com"},
+        ],
+      };
+      const order2 = await client.newOrder(params2);
+      assert.equal(order1.location, order2.location);
+      assert.equal(order1.result.authorizations[0], order2.result.authorizations[1]);
+      assert.equal(order1.result.authorizations[1], order2.result.authorizations[0]);
       assert.equal(order2.status, 201);
     });
 
