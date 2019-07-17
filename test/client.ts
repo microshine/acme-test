@@ -2,7 +2,6 @@
 import {config as env} from "dotenv";
 env();
 import * as assert from "assert";
-import fetch from "node-fetch";
 import {Convert} from "pvtsutils";
 import {AcmeClient, IHeaders} from "../src/client";
 import {crypto} from "../src/crypto";
@@ -17,45 +16,46 @@ export const urlServer = {
   ACME: "https://aeg-dev0-srv.aegdomain2.com/acme/directory",
   test: "http://aeg-dev0-srv.aegdomain2.com/acme-challenge",
   domain: "aeg-dev0-srv.aegdomain2.com",
+  globalSign: "https://aeg-dev0-srv.aegdomain2.com/acme/directory",
   LetSEncrypt: "https://acme-staging-v02.api.letsencrypt.org/directory",
-  local: "http://localhost:60298/directory",
 };
 const url = urlServer.LetSEncrypt;
+let authKey: CryptoKey;
+let client: AcmeClient;
+let order: IOrder;
+let authorization: IAuthorization;
+const rsaAlg: RsaHashedKeyGenParams = {
+  name: "RSASSA-PKCS1-v1_5",
+  hash: "SHA-256",
+  publicExponent: new Uint8Array([1, 0, 1]),
+  modulusLength: 2048,
+};
+const identifier = {type: "dns", value: "aeg-dev0-srv.aegdomain2.com"};
 
 context(`Client ${url}`, () => {
 
-  let client: AcmeClient;
-  let authKey: CryptoKey;
-  const rsaAlg: RsaHashedKeyGenParams = {
-    name: "RSASSA-PKCS1-v1_5",
-    hash: "SHA-256",
-    publicExponent: new Uint8Array([1, 0, 1]),
-    modulusLength: 2048,
-  };
-
   context("Directory", () => {
 
+    before(async () => {
+      await preparation();
+    });
+
     it("directory", async () => {
-      const res = await fetch(url, {method: "GET"});
-      const body = await res.json();
-      assert.equal(!!body.keyChange, true);
-      assert.equal(!!body.newAccount, true);
-      assert.equal(!!body.newNonce, true);
-      assert.equal(!!body.newOrder, true);
-      assert.equal(!!body.revokeCert, true);
+      if (client.directory) {
+        assert.equal(!!client.directory.keyChange, true);
+        assert.equal(!!client.directory.newAccount, true);
+        assert.equal(!!client.directory.newNonce, true);
+        assert.equal(!!client.directory.newOrder, true);
+        assert.equal(!!client.directory.revokeCert, true);
+        return true;
+      }
     });
   });
 
   context("Account Management", () => {
 
     before(async () => {
-      const keys = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
-      authKey = keys.privateKey;
-    });
-
-    before(async () => {
-      client = new AcmeClient({authKey});
-      await client.initialize(url);
+      await preparation();
     });
 
     it("Error: no agreement to the terms", async () => {
@@ -109,7 +109,7 @@ context(`Client ${url}`, () => {
       checkResAccount(res, 200);
     });
 
-    it("account update", async () => {
+    it("update account", async () => {
       const res = await client.updateAccount({contact: ["mailto:testmail@mail.ru"]});
       assert.equal(!!res.link, true);
       assert.equal(!!client.lastNonce, true);
@@ -134,61 +134,39 @@ context(`Client ${url}`, () => {
       });
     });
 
-    it("deactivate", async () => {
-      const res = await client.deactivate();
+    it("deactivate account", async () => {
+      const res = await client.deactivateAccount();
       assert.equal(!!res.link, true);
       assert.equal(!!client.lastNonce, true);
       assert.equal(res.result.status, "deactivated");
       assert.equal(res.status, 200);
-      if (url !== urlServer.LetSEncrypt) {
-        assert.equal(!!res.result.orders, true);
-      }
+    });
+
+    it("Error: account with the provided public key exists but is deactivated", async () => {
+      await assert.rejects(client.createAccount({
+        contact: ["mailto:microshine@mail.ru"],
+        termsOfServiceAgreed: true,
+      }), (err: AcmeError) => {
+        assert.equal(!!client.lastNonce, true);
+        assert.equal(err.status, 401);
+        assert.equal(err.type, "urn:ietf:params:acme:error:unauthorized");
+        return true;
+      });
     });
 
   });
 
-  context("Certificate Management", () => {
-
-    let order: IOrder;
-    let authorization: IAuthorization;
-
-    // before(async () => {
-    //   const acmeKey = process.env.ACME_KEY;
-    //   assert.equal(!!acmeKey, true, "Environment variable ACME_KEY does not exist");
-    //   authKey = await crypto.subtle.importKey("pkcs8", Buffer.from(acmeKey!, "base64"), rsaAlg, true, ["sign"]);
-    // });
+  context.only("Order Managment", () => {
 
     before(async () => {
-      const keys = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
-      authKey = keys.privateKey;
-    });
-
-    before(async () => {
-      client = new AcmeClient({authKey});
-      await client.initialize(url);
-    });
-
-    before(async () => {
-      try {
-        await client.createAccount({
-          onlyReturnExisting: true,
-        });
-      } catch (error) {
-        // create new account
-        await client.createAccount({
-          contact: ["mailto:microshine@mail.ru"],
-          termsOfServiceAgreed: true,
-        });
-      }
+      await preparation(true);
     });
 
     it("Error: create order without required params", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       await assert.rejects(
-        client.newOrder({
-          identifiers: [],
-        }), (err: AcmeError) => {
+        client.newOrder({identifiers: []}), (err: AcmeError) => {
           assert.equal(!!client.lastNonce, true);
           // assert.equal(res.error.type, "urn:ietf:params:acme:error:malformed");
           assert.equal(err.status, 400);
@@ -199,9 +177,7 @@ context(`Client ${url}`, () => {
     it("create order", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
-      const params: any = {
-        identifiers: [{type: "dns", value: "aeg-dev0-srv.aegdomain2.com"}],
-      };
+      const params: any = {identifiers: [identifier]};
       if (url !== urlServer.LetSEncrypt) {
         params.notAfter = date.toISOString();
         params.notBefore = new Date().toISOString();
@@ -216,6 +192,45 @@ context(`Client ${url}`, () => {
       order = res.result;
     });
 
+    it("create dublicate order", async () => {
+      const params: any = {identifiers: [identifier]};
+      const order1 = await client.newOrder(params);
+      const order2 = await client.newOrder(params);
+      assert.equal(order2.location, order1.location);
+      assert.equal(order2.status, 201);
+    });
+
+    it("create new order with extended identifier", async () => {
+      const params1: any = {identifiers: [identifier]};
+      const order1 = await client.newOrder(params1);
+      const params2: any = {
+        identifiers: [identifier, {type: "dns", value: "test.com"}],
+      };
+      const order2 = await client.newOrder(params2);
+      assert.notEqual(order1.location, order2.location);
+      assert.equal(order1.result.authorizations[0], order2.result.authorizations[0]);
+      assert.equal(order2.status, 201);
+    });
+
+    it("Error: Account is not valid, has status deactivated", async () => {
+      await client.deactivateAccount();
+      const params: any = {identifiers: [identifier]};
+      await assert.rejects(client.newOrder(params), (err: AcmeError) => {
+        assert.equal(!!client.lastNonce, true);
+        assert.equal(err.status, 401);
+        assert.equal(err.type, "urn:ietf:params:acme:error:unauthorized");
+        return true;
+      });
+    });
+
+  });
+
+  context("Certificate Management", () => {
+
+    before(async () => {
+      await preparation(true, true);
+    });
+
     it("authorization", async () => {
       const res = await client.getAuthorization(order.authorizations[0]);
       assert.equal(!!res.link, true);
@@ -226,6 +241,7 @@ context(`Client ${url}`, () => {
       assert.equal(!!res.result.identifier, true);
       assert.equal(!!res.result.challenges, true);
       authorization = res.result;
+
       const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
       const account = await client.createAccount({onlyReturnExisting: true});
       // const json = JSON.stringify(account.result.key, Object.keys(account.result.key));
@@ -267,9 +283,7 @@ context(`Client ${url}`, () => {
     });
 
     it("order ready", async () => {
-      const params: any = {
-        identifiers: [{type: "dns", value: "aeg-dev0-srv.aegdomain2.com"}],
-      };
+      const params: any = {identifiers: [identifier]};
       const res = await client.newOrder(params);
       assert.equal(!!res.link, true);
       assert.equal(!!client.lastNonce, true);
@@ -281,7 +295,7 @@ context(`Client ${url}`, () => {
     });
 
     it("finalize", async () => {
-      const csr = await generateCSR(rsaAlg, "aeg-dev0-srv.aegdomain2.com");
+      const csr = await generateCSR(rsaAlg, urlServer.domain);
       if (!order.finalize) {
         throw new Error("finalize link undefined");
       }
@@ -299,10 +313,10 @@ context(`Client ${url}`, () => {
       if (!order.certificate) {
         throw new Error("certificate link undefined");
       }
-      const res = await fetch(order.certificate, {method: "GET"});
-      assert.equal(res.headers.has("link"), true);
+      const res = await client.getCertificate(order.certificate);
+      assert.equal(!!res.link, true);
       assert.equal(res.status, 200);
-      assert.equal(!!(await res.text()), true);
+      assert.equal(!!res.result, true);
     });
 
   });
@@ -315,12 +329,33 @@ context(`Client ${url}`, () => {
   function checkResAccount(res: any, status: number) {
     assert.equal(res.result.status, "valid");
     assert.equal(res.status, status);
-    if (url !== urlServer.LetSEncrypt) {
-      assert.equal(!!res.result.orders, true);
-    }
   }
 });
 
 async function pause(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function preparation(newAccount?: boolean, newOrder?: boolean) {
+  // const acmeKey = process.env.ACME_KEY;
+  // assert.equal(!!acmeKey, true, "Environment variable ACME_KEY does not exist");
+  // authKey = await crypto.subtle.importKey("pkcs8", Buffer.from(acmeKey!, "base64"), rsaAlg, true, ["sign"]);
+
+  const keys = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
+  authKey = keys.privateKey;
+  client = new AcmeClient({authKey});
+  await client.initialize(url);
+
+  if (newAccount) {
+    await client.createAccount({
+      contact: ["mailto:microshine@mail.ru"],
+      termsOfServiceAgreed: true,
+    });
+  }
+
+  if (newOrder) {
+    const params: any = {identifiers: [identifier]};
+    const res = await client.newOrder(params);
+    order = res.result;
+  }
 }

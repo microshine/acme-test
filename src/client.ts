@@ -2,7 +2,6 @@ import "colors";
 import jws from "jws";
 import {Response} from "node-fetch";
 import fetch from "node-fetch";
-import * as util from "util";
 import * as core from "webcrypto-core";
 import {crypto} from "./crypto";
 import {AcmeError} from "./error";
@@ -52,7 +51,7 @@ export class AcmeClient {
 
   public lastNonce: string = "";
   public directory?: IDirectory;
-  private authKey: IAuthKey;
+  public authKey: IAuthKey;
   private debug: boolean;
 
   constructor(options: IAcmeClientOptions) {
@@ -99,8 +98,16 @@ export class AcmeClient {
     return res;
   }
 
-  public async deactivate() {
-    return this.request<IAccount>(this.getKeyId(), "POST", {status: "deactivated"});
+  public async deactivateAccount() {
+    return this.deactivate<IAccount>(this.getKeyId());
+  }
+
+  public async deactivateAuthorization() {
+    return this.deactivate<IAuthorization>(this.getKeyId());
+  }
+
+  public async deactivate<T>(url: string) {
+    return this.request<T>(url, "POST", {status: "deactivated"});
   }
 
   public async createURL(url: string, id: string, token: string) {
