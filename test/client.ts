@@ -50,6 +50,25 @@ context(`Client ${url}`, () => {
         return true;
       }
     });
+
+    it("Error: replay-nonce", async () => {
+      await preparation(true);
+      client.lastNonce = "badNonce";
+      const params: any = {identifiers: [identifier]};
+      await assert.rejects(client.newOrder(params), (err: AcmeError) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:badNonce");
+        return true;
+      });
+    });
+
+    it("Error: method not allowed", async () => {
+      await assert.rejects(client.request(`${url}/ooops`), (err: AcmeError) => {
+        assert.equal(err.status, 405);
+        return true;
+      });
+    });
+
   });
 
   context("Account Management", () => {
@@ -156,7 +175,7 @@ context(`Client ${url}`, () => {
 
   });
 
-  context.only("Order Managment", () => {
+  context("Order Managment", () => {
 
     before(async () => {
       await preparation(true);
@@ -299,7 +318,7 @@ context(`Client ${url}`, () => {
       if (!order.finalize) {
         throw new Error("finalize link undefined");
       }
-      const res = await client.getFinalize(order.finalize, {csr: Convert.ToBase64Url(csr.csr)});
+      const res = await client.finalize(order.finalize, {csr: Convert.ToBase64Url(csr.csr)});
       checkHeaders(res);
       assert.equal(res.status, 200);
       assert.equal(res.result.status, "valid");

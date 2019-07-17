@@ -202,7 +202,7 @@ export class AcmeClient {
     return res;
   }
 
-  public async getFinalize(url: string, params: IFinalize) {
+  public async finalize(url: string, params: IFinalize) {
     return this.request<IOrder>(url, "POST", params);
   }
 

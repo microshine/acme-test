@@ -66,7 +66,7 @@ export async function main(options: ICertificateOptions) {
 
   await client.getChallenge(challange.url, "POST");
   const csr = await generateCSR(options.algorithm, options.domain);
-  const finalize = (await client.getFinalize(order.result.finalize, {csr: Convert.ToBase64Url(csr.csr)})).result;
+  const finalize = (await client.finalize(order.result.finalize, {csr: Convert.ToBase64Url(csr.csr)})).result;
   if (!finalize.certificate) {
     throw new Error("No certificate link");
   }
