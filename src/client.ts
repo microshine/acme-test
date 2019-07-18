@@ -11,12 +11,15 @@ import {
 } from "./types";
 import {IAuthorization, IHttpChallenge} from "./types/authorization";
 
+const {EventEmitter} = require("events");
+
 export interface IAcmeClientOptions {
   /**
    * Private key for authentication
    */
   authKey: CryptoKey;
   debug?: boolean;
+  challenge?: Function;
 }
 
 export interface ICreateJwsOptions {
@@ -47,18 +50,21 @@ export interface IAuthKey {
 
 type Method = "POST" | "GET";
 
-export class AcmeClient {
+export class AcmeClient extends EventEmitter {
 
   public lastNonce: string = "";
   public directory?: IDirectory;
   public authKey: IAuthKey;
+  public challengeHandler?: Function;
   private debug: boolean;
 
   constructor(options: IAcmeClientOptions) {
+    super();
     this.authKey = {
       key: options.authKey,
     };
     this.debug = !!options.debug;
+    this.challengeHandler = options.challenge;
   }
 
   public async initialize(url: string) {
@@ -198,6 +204,9 @@ export class AcmeClient {
   public async getChallenge(url: string, method: Method = "GET") {
     const res = await this.request<IHttpChallenge>(url, method, {});
     if (method === "POST") {
+      if (this.challengeHandler) {
+        await this.challengeHandler();
+      }
       await this.pause(2000);
     }
     return res;

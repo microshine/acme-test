@@ -13,13 +13,11 @@ import {generateCSR} from "./csr";
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
 
 export const urlServer = {
-  ACME: "https://aeg-dev0-srv.aegdomain2.com/acme/directory",
   test: "http://aeg-dev0-srv.aegdomain2.com/acme-challenge",
-  domain: "aeg-dev0-srv.aegdomain2.com",
-  globalSign: "https://aeg-dev0-srv.aegdomain2.com/acme/directory",
-  LetSEncrypt: "https://acme-staging-v02.api.letsencrypt.org/directory",
 };
-const url = urlServer.globalSign;
+
+const url = process.env["URL_SERVER"] || "";
+const domain = domainFromURL(url);
 let authKey: CryptoKey;
 let client: AcmeClient;
 let order: IOrder;
@@ -201,7 +199,7 @@ context(`Client ${url}`, () => {
       await assert.rejects(
         client.newOrder({identifiers: []}), (err: AcmeError) => {
           assert.equal(!!client.lastNonce, true);
-          // assert.equal(res.error.type, "urn:ietf:params:acme:error:malformed");
+          assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
           assert.equal(err.status, 400);
           return true;
         });
@@ -211,10 +209,6 @@ context(`Client ${url}`, () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       const params: any = {identifiers: [identifier]};
-      if (url !== urlServer.LetSEncrypt) {
-        params.notAfter = date.toISOString();
-        params.notBefore = new Date().toISOString();
-      }
       const res = await client.newOrder(params);
       assert.equal(!!res.link, true);
       assert.equal(!!client.lastNonce, true);
@@ -375,7 +369,7 @@ context(`Client ${url}`, () => {
     });
 
     it("finalize", async () => {
-      const csr = await generateCSR(rsaAlg, urlServer.domain);
+      const csr = await generateCSR(rsaAlg, domain);
       if (!order.finalize) {
         throw new Error("finalize link undefined");
       }
@@ -416,6 +410,19 @@ async function pause(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Получение домена из URL
+ * @param url 
+ */
+function domainFromURL(url: string) {
+  const regex = /(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]/gm;
+  const matches = regex.exec(url);
+  if (!matches) {
+    throw new Error("Not parse domain from url");
+  }
+  return matches[1];
+}
+
 async function preparation(newAccount?: boolean, newOrder?: boolean) {
   // const acmeKey = process.env.ACME_KEY;
   // assert.equal(!!acmeKey, true, "Environment variable ACME_KEY does not exist");
@@ -423,7 +430,7 @@ async function preparation(newAccount?: boolean, newOrder?: boolean) {
 
   const keys = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
   authKey = keys.privateKey;
-  client = new AcmeClient({authKey});
+  client = new AcmeClient({authKey, debug: !!process.env["ACME_DEBUG"]});
   await client.initialize(url);
 
   if (newAccount) {
