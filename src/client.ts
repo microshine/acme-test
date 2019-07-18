@@ -174,7 +174,8 @@ export class AcmeClient {
       throw new AcmeError(errJson);
     }
     let result: any;
-    if (response.headers.get("content-type") === "application/pem-certificate-chain") {
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/pem-certificate-chain")) {
       result = await response.text();
     } else {
       result = await response.json();
@@ -210,8 +211,8 @@ export class AcmeClient {
     return this.request<IAuthorization>(url, method, "");
   }
 
-  public async getCertificate(url: string) {
-    const response = await this.request<string>(url);
+  public async getCertificate(url: string, method: Method = "POST") {
+    const response = await this.request<string>(url, method, "");
     const certs: string[] = [];
     const regex = /(-----BEGIN CERTIFICATE-----[a-z0-9\/+=\n]+-----END CERTIFICATE-----)/gmis;
     let matches: RegExpExecArray | null = null;

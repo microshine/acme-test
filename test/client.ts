@@ -65,6 +65,7 @@ context(`Client ${url}`, () => {
     it("Error: method not allowed", async () => {
       await assert.rejects(client.request(`${url}/ooops`), (err: AcmeError) => {
         assert.equal(err.status, 405);
+        assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
         return true;
       });
     });
@@ -103,7 +104,6 @@ context(`Client ${url}`, () => {
 
     // todo: mailto
     // todo: validate email
-
     it("create account", async () => {
       const res = await client.createAccount({
         contact: ["mailto:microshine@mail.ru"],
@@ -153,6 +153,20 @@ context(`Client ${url}`, () => {
       });
     });
 
+    it("Error: method not allowed for GET", async () => {
+      const res = await client.createAccount({
+        contact: ["mailto:microshine@mail.ru"],
+        onlyReturnExisting: true,
+      });
+      if (res.location) {
+        await assert.rejects(client.request(res.location, "GET"), (err: AcmeError) => {
+          assert.equal(err.status, 405);
+          assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
+          return true;
+        });
+      }
+    });
+
     it("deactivate account", async () => {
       const res = await client.deactivateAccount();
       assert.equal(!!res.link, true);
@@ -175,7 +189,7 @@ context(`Client ${url}`, () => {
 
   });
 
-  context.only("Order Managment", () => {
+  context("Order Management", () => {
 
     before(async () => {
       await preparation(true);
@@ -211,25 +225,34 @@ context(`Client ${url}`, () => {
       order = res.result;
     });
 
-    it("create dublicate order", async () => {
+    it("create duplicate order", async () => {
       const params: any = {identifiers: [identifier]};
       const order1 = await client.newOrder(params);
       const order2 = await client.newOrder(params);
       assert.equal(order2.location, order1.location);
+      assert.deepEqual(order1.result.authorizations.sort(), order2.result.authorizations.sort());
       assert.equal(order2.status, 201);
     });
 
     it("create new order with extended identifier", async () => {
-      const params1: any = {identifiers: [identifier]};
+      const params1: any = {
+        identifiers: [
+          {type: "dns", value: "test5.com"},
+        ],
+      };
       const order1 = await client.newOrder(params1);
       const params2: any = {
-        identifiers: [identifier, {type: "dns", value: "test.com"}],
+        identifiers: [
+          {type: "dns", value: "test5.com"},
+          {type: "dns", value: "test6.com"},
+        ],
       };
       const order2 = await client.newOrder(params2);
       assert.notEqual(order1.location, order2.location);
-      assert.equal(order1.result.authorizations[0], order2.result.authorizations[0]);
+      assert.equal(order1.result.authorizations[0], order2.result.authorizations.sort()[0]);
       assert.equal(order2.status, 201);
     });
+
     it("create new order with one of the  identifier", async () => {
       const params1: any = {
         identifiers: [
@@ -245,7 +268,7 @@ context(`Client ${url}`, () => {
       };
       const order2 = await client.newOrder(params2);
       assert.notEqual(order1.location, order2.location);
-      assert.equal(order1.result.authorizations[0], order2.result.authorizations[0]);
+      assert.deepEqual(order1.result.authorizations.sort()[0], order2.result.authorizations[0]);
       assert.equal(order2.status, 201);
     });
 
@@ -265,8 +288,7 @@ context(`Client ${url}`, () => {
       };
       const order2 = await client.newOrder(params2);
       assert.equal(order1.location, order2.location);
-      assert.equal(order1.result.authorizations[0], order2.result.authorizations[1]);
-      assert.equal(order1.result.authorizations[1], order2.result.authorizations[0]);
+      assert.deepEqual(order1.result.authorizations.sort(), order2.result.authorizations.sort());
       assert.equal(order2.status, 201);
     });
 
@@ -322,7 +344,7 @@ context(`Client ${url}`, () => {
       let count = 0;
       while (challenge.status === "pending" && count++ < 5) {
         await pause(2000);
-        const res = await client.getChallenge(challenge.url, "GET");
+        const res = await client.getChallenge(challenge.url, "POST");
         challenge = res.result;
       }
       assert.equal(challenge.status, "valid");
