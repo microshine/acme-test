@@ -301,7 +301,7 @@ context(`Client ${url}`, () => {
 
   });
 
-  context.only("Certificate Management", () => {
+  context("Certificate Management", () => {
 
     before(async () => {
       await preparation(true, true);
