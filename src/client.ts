@@ -1,17 +1,29 @@
 import "colors";
 import jws from "jws";
-import {Response} from "node-fetch";
+import { Response } from "node-fetch";
 import fetch from "node-fetch";
 import * as core from "webcrypto-core";
-import {crypto} from "./crypto";
-import {AcmeError} from "./error";
+import { crypto } from "./crypto";
+import { AcmeError } from "./error";
 import {
   Base64UrlString, IAccount, ICreateAccount,
   IDirectory, IFinalize, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
 } from "./types";
-import {IAuthorization, IHttpChallenge} from "./types/authorization";
+import { IAuthorization, IHttpChallenge } from "./types/authorization";
+import { Convert } from "pvtsutils";
 
-const {EventEmitter} = require("events");
+export enum RevocationReason {
+  Unspecified = 0,
+  KeyCompromise = 1,
+  CACompromise = 2,
+  AffiliationChanged = 3,
+  Superseded = 4,
+  CessationOfOperation = 5,
+  CertificateHold = 6,
+  RemoveFromCRL = 8,
+  PrivilegeWithdrawn = 9,
+  AACompromise = 10,
+}
 
 export interface IAcmeClientOptions {
   /**
@@ -19,7 +31,6 @@ export interface IAcmeClientOptions {
    */
   authKey: CryptoKey;
   debug?: boolean;
-  challenge?: Function;
 }
 
 export interface ICreateJwsOptions {
@@ -50,31 +61,28 @@ export interface IAuthKey {
 
 type Method = "POST" | "GET";
 
-export class AcmeClient extends EventEmitter {
+export class AcmeClient {
 
   public lastNonce: string = "";
   public directory?: IDirectory;
   public authKey: IAuthKey;
-  public challengeHandler?: Function;
   private debug: boolean;
 
   constructor(options: IAcmeClientOptions) {
-    super();
     this.authKey = {
       key: options.authKey,
     };
     this.debug = !!options.debug;
-    this.challengeHandler = options.challenge;
   }
 
   public async initialize(url: string) {
-    const response = await fetch(url, {method: "GET"});
+    const response = await fetch(url, { method: "GET" });
     this.directory = await response.json();
     return this.directory;
   }
 
   public async nonce() {
-    const response = await fetch(this.getDirectory().newNonce, {method: "GET"});
+    const response = await fetch(this.getDirectory().newNonce, { method: "GET" });
     return this.getNonce(response);
   }
 
@@ -96,12 +104,19 @@ export class AcmeClient extends EventEmitter {
       account: this.getKeyId(),
       oldKey: await this.exportPublicKey(this.authKey.key),
     };
-    const innerToken = await this.createJWS(keyChange, {omitNonce: true, url: this.getDirectory().keyChange, key});
+    const innerToken = await this.createJWS(keyChange, { omitNonce: true, url: this.getDirectory().keyChange, key });
     const res = await this.request<IAccount>(this.getDirectory().keyChange, "POST", innerToken);
     if (key) {
       this.authKey.key = key;
     }
     return res;
+  }
+
+  public async revoke(certificate: BufferSource, reason?: RevocationReason) {
+    return this.request(this.getDirectory().revokeCert, "POST", {
+      certificate: Convert.ToBase64Url(certificate),
+      reason,
+    });
   }
 
   public async deactivateAccount() {
@@ -113,21 +128,7 @@ export class AcmeClient extends EventEmitter {
   }
 
   public async deactivate<T>(url: string) {
-    return this.request<T>(url, "POST", {status: "deactivated"});
-  }
-
-  public async createURL(url: string, id: string, token: string) {
-    const body = JSON.stringify({id, token: `${id}.${token}`});
-    const res = await fetch(url, {
-      method: "post",
-      headers: {
-        "content-type": "application/json",
-      },
-      body,
-    });
-    if (res.status !== 204) {
-      throw new Error(await res.text());
-    }
+    return this.request<T>(url, "POST", { status: "deactivated" });
   }
 
   /**
@@ -144,24 +145,23 @@ export class AcmeClient extends EventEmitter {
     params?: any,
     kid: boolean = true): Promise<IPostResult<T>> {
     let response: Response;
-    if (method === "POST") {
-      if (!this.lastNonce) {
-        this.lastNonce = await this.nonce();
-      }
-      const token = kid
-        ? await this.createJWS(params, Object.assign({url}, {kid: this.getKeyId()}))
-        : await this.createJWS(params, Object.assign({url}));
-      response = await fetch(url, {
-        method,
-        headers: {
-          "content-type": "application/jose+json",
-        },
-        body: JSON.stringify(token),
-      });
-      this.lastNonce = response.headers.get("replay-nonce") || "";
-    } else {
-      response = await fetch(url, {method});
+    if (!this.lastNonce) {
+      this.lastNonce = await this.nonce();
     }
+    if (!params || method === "GET") {
+      params = "";
+    }
+    const token = kid
+      ? await this.createJWS(params, Object.assign({ url }, { kid: this.getKeyId() }))
+      : await this.createJWS(params, Object.assign({ url }));
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/jose+json",
+      },
+      body: JSON.stringify(token),
+    });
+    this.lastNonce = response.headers.get("replay-nonce") || "";
     const headers: IHeaders = {
       link: response.headers.get("link") || undefined,
       location: response.headers.get("location") || undefined,
@@ -183,7 +183,7 @@ export class AcmeClient extends EventEmitter {
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/pem-certificate-chain")) {
       result = await response.text();
-    } else {
+    } else if (contentType) {
       result = await response.json();
     }
     const res: IPostResult = {
@@ -202,11 +202,8 @@ export class AcmeClient extends EventEmitter {
   }
 
   public async getChallenge(url: string, method: Method = "GET") {
-    const res = await this.request<IHttpChallenge>(url, method, {});
+    const res = await this.request<IHttpChallenge>(url, method, {}); //{}
     if (method === "POST") {
-      if (this.challengeHandler) {
-        await this.challengeHandler();
-      }
       await this.pause(2000);
     }
     return res;
@@ -216,12 +213,12 @@ export class AcmeClient extends EventEmitter {
     return this.request<IOrder>(url, "POST", params);
   }
 
-  public async getAuthorization(url: string, method: Method = "POST") {
-    return this.request<IAuthorization>(url, method, "");
+  public async getAuthorization(url: string, method: Method = "GET") {
+    return this.request<IAuthorization>(url, method);
   }
 
   public async getCertificate(url: string, method: Method = "POST") {
-    const response = await this.request<string>(url, method, "");
+    const response = await this.request<string>(url, method);
     const certs: string[] = [];
     const regex = /(-----BEGIN CERTIFICATE-----[a-z0-9\/+=\n]+-----END CERTIFICATE-----)/gmis;
     let matches: RegExpExecArray | null = null;

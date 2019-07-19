@@ -1,14 +1,16 @@
 
-import {config as env} from "dotenv";
+import { config as env } from "dotenv";
 env();
 import * as assert from "assert";
-import {Convert} from "pvtsutils";
-import {AcmeClient, IHeaders} from "../src/client";
-import {crypto} from "../src/crypto";
-import {AcmeError} from "../src/error";
-import {IOrder} from "../src/types";
-import {IAuthorization, IHttpChallenge} from "../src/types/authorization";
-import {generateCSR} from "./csr";
+import fetch from "node-fetch";
+import { Convert } from "pvtsutils";
+import { AcmeClient, IHeaders, RevocationReason } from "../src/client";
+import { crypto } from "../src/crypto";
+import { AcmeError } from "../src/error";
+import { IOrder } from "../src/types";
+import { IAuthorization, IHttpChallenge } from "../src/types/authorization";
+import { generateCSR } from "./csr";
+import { PemConverter } from "webcrypto-core";
 
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
 
@@ -28,7 +30,7 @@ const rsaAlg: RsaHashedKeyGenParams = {
   publicExponent: new Uint8Array([1, 0, 1]),
   modulusLength: 2048,
 };
-const identifier = {type: "dns", value: "aeg-dev0-srv.aegdomain2.com"};
+const identifier = { type: "dns", value: "aeg-dev0-srv.aegdomain2.com" };
 
 context(`Client ${url}`, () => {
 
@@ -52,7 +54,7 @@ context(`Client ${url}`, () => {
     it("Error: replay-nonce", async () => {
       await preparation(true);
       client.lastNonce = "badNonce";
-      const params: any = {identifiers: [identifier]};
+      const params: any = { identifiers: [identifier] };
       await assert.rejects(client.newOrder(params), (err: AcmeError) => {
         assert.equal(err.status, 400);
         assert.equal(err.type, "urn:ietf:params:acme:error:badNonce");
@@ -121,13 +123,13 @@ context(`Client ${url}`, () => {
     });
 
     it("finding an account", async () => {
-      const res = await client.createAccount({onlyReturnExisting: true});
+      const res = await client.createAccount({ onlyReturnExisting: true });
       checkHeaders(res);
       checkResAccount(res, 200);
     });
 
     it("update account", async () => {
-      const res = await client.updateAccount({contact: ["mailto:testmail@mail.ru"]});
+      const res = await client.updateAccount({ contact: ["mailto:testmail@mail.ru"] });
       assert.equal(!!res.link, true);
       assert.equal(!!client.lastNonce, true);
       checkResAccount(res, 200);
@@ -157,7 +159,7 @@ context(`Client ${url}`, () => {
         onlyReturnExisting: true,
       });
       if (res.location) {
-        await assert.rejects(client.request(res.location, "GET"), (err: AcmeError) => {
+        await assert.rejects(fetch(res.location, { method: "GET" }), (err: any) => {
           assert.equal(err.status, 405);
           assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
           return true;
@@ -197,7 +199,7 @@ context(`Client ${url}`, () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
       await assert.rejects(
-        client.newOrder({identifiers: []}), (err: AcmeError) => {
+        client.newOrder({ identifiers: [] }), (err: AcmeError) => {
           assert.equal(!!client.lastNonce, true);
           assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
           assert.equal(err.status, 400);
@@ -208,7 +210,7 @@ context(`Client ${url}`, () => {
     it("create order", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
-      const params: any = {identifiers: [identifier]};
+      const params: any = { identifiers: [identifier] };
       const res = await client.newOrder(params);
       assert.equal(!!res.link, true);
       assert.equal(!!client.lastNonce, true);
@@ -220,7 +222,7 @@ context(`Client ${url}`, () => {
     });
 
     it("create duplicate order", async () => {
-      const params: any = {identifiers: [identifier]};
+      const params: any = { identifiers: [identifier] };
       const order1 = await client.newOrder(params);
       const order2 = await client.newOrder(params);
       assert.equal(order2.location, order1.location);
@@ -231,53 +233,53 @@ context(`Client ${url}`, () => {
     it("create new order with extended identifier", async () => {
       const params1: any = {
         identifiers: [
-          {type: "dns", value: "test5.com"},
+          { type: "dns", value: "test5.com" },
         ],
       };
       const order1 = await client.newOrder(params1);
       const params2: any = {
         identifiers: [
-          {type: "dns", value: "test5.com"},
-          {type: "dns", value: "test6.com"},
+          { type: "dns", value: "test5.com" },
+          { type: "dns", value: "test6.com" },
         ],
       };
       const order2 = await client.newOrder(params2);
       assert.notEqual(order1.location, order2.location);
-      assert.equal(order1.result.authorizations[0], order2.result.authorizations.sort()[0]);
+      assert.equal(order2.result.authorizations.includes(order1.result.authorizations[0]), true);
       assert.equal(order2.status, 201);
     });
 
     it("create new order with one of the  identifier", async () => {
       const params1: any = {
         identifiers: [
-          {type: "dns", value: "test3.com"},
-          {type: "dns", value: "test4.com"},
+          { type: "dns", value: "test3.com" },
+          { type: "dns", value: "test4.com" },
         ],
       };
       const order1 = await client.newOrder(params1);
       const params2: any = {
         identifiers: [
-          {type: "dns", value: "test3.com"},
+          { type: "dns", value: "test3.com" },
         ],
       };
       const order2 = await client.newOrder(params2);
       assert.notEqual(order1.location, order2.location);
-      assert.deepEqual(order1.result.authorizations.sort()[0], order2.result.authorizations[0]);
+      assert.equal(order1.result.authorizations.includes(order2.result.authorizations[0]), true);
       assert.equal(order2.status, 201);
     });
 
     it("create new order with same identifiers", async () => {
       const params1: any = {
         identifiers: [
-          {type: "dns", value: "test1.com"},
-          {type: "dns", value: "test2.com"},
+          { type: "dns", value: "test1.com" },
+          { type: "dns", value: "test2.com" },
         ],
       };
       const order1 = await client.newOrder(params1);
       const params2: any = {
         identifiers: [
-          {type: "dns", value: "test2.com"},
-          {type: "dns", value: "test1.com"},
+          { type: "dns", value: "test2.com" },
+          { type: "dns", value: "test1.com" },
         ],
       };
       const order2 = await client.newOrder(params2);
@@ -288,7 +290,7 @@ context(`Client ${url}`, () => {
 
     it("Error: Account is not valid, has status deactivated", async () => {
       await client.deactivateAccount();
-      const params: any = {identifiers: [identifier]};
+      const params: any = { identifiers: [identifier] };
       await assert.rejects(client.newOrder(params), (err: AcmeError) => {
         assert.equal(!!client.lastNonce, true);
         assert.equal(err.status, 401);
@@ -299,7 +301,7 @@ context(`Client ${url}`, () => {
 
   });
 
-  context("Certificate Management", () => {
+  context.only("Certificate Management", () => {
 
     before(async () => {
       await preparation(true, true);
@@ -315,16 +317,6 @@ context(`Client ${url}`, () => {
       assert.equal(!!res.result.identifier, true);
       assert.equal(!!res.result.challenges, true);
       authorization = res.result;
-
-      const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
-      const account = await client.createAccount({onlyReturnExisting: true});
-      // const json = JSON.stringify(account.result.key, Object.keys(account.result.key));
-      delete account.result.key.alg;
-      const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
-      await client.createURL(
-        urlServer.test, challange.token,
-        Convert.ToBase64Url(await crypto.subtle.digest("SHA-256", Buffer.from(json))),
-      );
     });
 
     it("challange http-01 pending", async () => {
@@ -333,12 +325,13 @@ context(`Client ${url}`, () => {
     });
 
     it("challange http-01 valid", async () => {
+      await createURL();
       let challenge = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
       await client.getChallenge(challenge.url, "POST");
       let count = 0;
       while (challenge.status === "pending" && count++ < 5) {
         await pause(2000);
-        const res = await client.getChallenge(challenge.url, "POST");
+        const res = await client.getChallenge(challenge.url, "GET");
         challenge = res.result;
       }
       assert.equal(challenge.status, "valid");
@@ -357,7 +350,7 @@ context(`Client ${url}`, () => {
     });
 
     it("order ready", async () => {
-      const params: any = {identifiers: [identifier]};
+      const params: any = { identifiers: [identifier] };
       const res = await client.newOrder(params);
       assert.equal(!!res.link, true);
       assert.equal(!!client.lastNonce, true);
@@ -369,11 +362,11 @@ context(`Client ${url}`, () => {
     });
 
     it("finalize", async () => {
-      const csr = await generateCSR(rsaAlg, domain);
+      const csr = await generateCSR(rsaAlg, identifier.value);
       if (!order.finalize) {
         throw new Error("finalize link undefined");
       }
-      const res = await client.finalize(order.finalize, {csr: Convert.ToBase64Url(csr.csr)});
+      const res = await client.finalize(order.finalize, { csr: Convert.ToBase64Url(csr.csr) });
       checkHeaders(res);
       assert.equal(res.status, 200);
       assert.equal(res.result.status, "valid");
@@ -391,6 +384,30 @@ context(`Client ${url}`, () => {
       assert.equal(!!res.link, true);
       assert.equal(res.status, 200);
       assert.equal(!!res.result, true);
+    });
+
+    it("revoke", async () => {
+      if (!order.certificate) {
+        throw new Error("certificate link undefined");
+      }
+      const res = await client.getCertificate(order.certificate);
+      const cert = PemConverter.toUint8Array(res.result[0]);
+      const revoke = await client.revoke(cert, RevocationReason.Unspecified);
+      assert.equal(revoke.status, 200);
+      assert.equal(!!revoke.link, true);
+    });
+
+    it("Error: revoke", async () => {
+      if (!order.certificate) {
+        throw new Error("certificate link undefined");
+      }
+      const res = await client.getCertificate(order.certificate);
+      const cert = PemConverter.toUint8Array(res.result[0]);
+      await assert.rejects(client.revoke(cert, RevocationReason.Unspecified), (err: AcmeError) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:alreadyRevoked");
+        return true;
+      });
     });
 
   });
@@ -420,7 +437,7 @@ function domainFromURL(url: string) {
   if (!matches) {
     throw new Error("Not parse domain from url");
   }
-  return matches[1];
+  return matches[0];
 }
 
 async function preparation(newAccount?: boolean, newOrder?: boolean) {
@@ -430,7 +447,7 @@ async function preparation(newAccount?: boolean, newOrder?: boolean) {
 
   const keys = await crypto.subtle.generateKey(rsaAlg, true, ["sign", "verify"]);
   authKey = keys.privateKey;
-  client = new AcmeClient({authKey, debug: !!process.env["ACME_DEBUG"]});
+  client = new AcmeClient({ authKey, debug: !!process.env["ACME_DEBUG"] });
   await client.initialize(url);
 
   if (newAccount) {
@@ -441,8 +458,29 @@ async function preparation(newAccount?: boolean, newOrder?: boolean) {
   }
 
   if (newOrder) {
-    const params: any = {identifiers: [identifier]};
+    const params: any = { identifiers: [identifier] };
     const res = await client.newOrder(params);
     order = res.result;
+  }
+}
+
+async function createURL() {
+  const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
+  const account = await client.createAccount({ onlyReturnExisting: true });
+  // const json = JSON.stringify(account.result.key, Object.keys(account.result.key));
+  delete account.result.key.alg;
+  const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
+  const id = challange.token;
+  const token = Convert.ToBase64Url(await crypto.subtle.digest("SHA-256", Buffer.from(json)));
+  const body = JSON.stringify({ id, token: `${id}.${token}` });
+  const res = await fetch(urlServer.test, {
+    method: "post",
+    headers: {
+      "content-type": "application/json",
+    },
+    body,
+  });
+  if (res.status !== 204) {
+    throw new Error(await res.text());
   }
 }
