@@ -8,7 +8,7 @@ import { Crypto } from "@peculiar/webcrypto";
  * @param algorithm Алгоритм генерации ключа
  * @param domain Домен на который составляется заказ
  */
-export async function generateCSR(algorithm: RsaHashedKeyGenParams | EcKeyGenParams, domain: string) {
+export async function generateCSR(algorithm: RsaHashedKeyGenParams | EcKeyGenParams, domain?: string) {
 
   const crypto = new Crypto();
 
@@ -24,10 +24,12 @@ export async function generateCSR(algorithm: RsaHashedKeyGenParams | EcKeyGenPar
 
   pkcs10.version = 0;
   // pkcs10 = decoratePkcs10Subject(pkcs10, data);
-  pkcs10.subject.typesAndValues.push(new pkijs.AttributeTypeAndValue({
-    type: "2.5.4.3",
-    value: new asn1js.PrintableString({ value: domain }),
-  }));
+  if (domain) {
+    pkcs10.subject.typesAndValues.push(new pkijs.AttributeTypeAndValue({
+      type: "2.5.4.3",
+      value: new asn1js.PrintableString({ value: domain }),
+    }));
+  }
   pkcs10.attributes = [];
 
   await pkcs10.subjectPublicKeyInfo.importKey(publicKey);

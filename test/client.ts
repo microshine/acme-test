@@ -365,6 +365,30 @@ context(`Client ${url}`, () => {
       order = res.result;
     });
 
+    it("Error: finalize with bad CSR without identifier", async () => {
+      const csr = await generateCSR(rsaAlg);
+      if (!order.finalize) {
+        throw new Error("finalize link undefined");
+      }
+      await assert.rejects(client.finalize(order.finalize, { csr: Convert.ToBase64Url(csr.csr) }), (err: AcmeError) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
+        return true;
+      });
+    });
+
+    it("Error: finalize with CSR with bad identifier", async () => {
+      const csr = await generateCSR(rsaAlg, "badIdentifier.com");
+      if (!order.finalize) {
+        throw new Error("finalize link undefined");
+      }
+      await assert.rejects(client.finalize(order.finalize, { csr: Convert.ToBase64Url(csr.csr) }), (err: AcmeError) => {
+        assert.equal(err.status, 403);
+        assert.equal(err.type, "urn:ietf:params:acme:error:unauthorized");
+        return true;
+      });
+    });
+
     it("finalize", async () => {
       const csr = await generateCSR(rsaAlg, identifier.value);
       if (!order.finalize) {
