@@ -2,6 +2,7 @@ import "colors";
 import jws from "jws";
 import { Response } from "node-fetch";
 import fetch from "node-fetch";
+import { Convert } from "pvtsutils";
 import * as core from "webcrypto-core";
 import { crypto } from "./crypto";
 import { AcmeError } from "./error";
@@ -10,7 +11,6 @@ import {
   IDirectory, IFinalize, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
 } from "./types";
 import { IAuthorization, IHttpChallenge } from "./types/authorization";
-import { Convert } from "pvtsutils";
 
 export enum RevocationReason {
   Unspecified = 0,
@@ -61,6 +61,9 @@ export interface IAuthKey {
 
 type Method = "POST" | "GET";
 
+/**
+ * Class of work with ACME servers
+ */
 export class AcmeClient {
 
   public lastNonce: string = "";
@@ -75,17 +78,30 @@ export class AcmeClient {
     this.debug = !!options.debug;
   }
 
+  /**
+   * Retrieving a list of controllers from an ACME server
+   * @param url ACME Server Controller List Issue URL
+   */
   public async initialize(url: string) {
     const response = await fetch(url, { method: "GET" });
     this.directory = await response.json();
     return this.directory;
   }
 
+  /**
+   * Confirmation Code Request
+   */
   public async nonce() {
     const response = await fetch(this.getDirectory().newNonce, { method: "GET" });
     return this.getNonce(response);
   }
 
+  /**
+   * Create account.
+   * To create a new account, you must specify the termsOfServiceAgreed: true parameter.
+   * To search for an account, you must specify the parameter onlyReturnExisting: true.
+   * @param params Request parameters
+   */
   public async createAccount(params: ICreateAccount) {
     const res = await this.request<IAccount>(this.getDirectory().newAccount, "POST", params, false);
     if (!res.location) {
@@ -95,10 +111,18 @@ export class AcmeClient {
     return res;
   }
 
+  /**
+   * Update account settings.
+   * @param params Updateable parameters
+   */
   public async updateAccount(params: IUpdateAccount) {
     return this.request<IAccount>(this.getKeyId(), "POST", params);
   }
 
+  /**
+   * Account key change
+   * @param key New key
+   */
   public async changeKey(key?: CryptoKey) {
     const keyChange: IKeyChange = {
       account: this.getKeyId(),
@@ -112,6 +136,11 @@ export class AcmeClient {
     return res;
   }
 
+  /**
+   * Certificate revocation.
+   * @param certificate 
+   * @param reason Reason for feedback
+   */
   public async revoke(certificate: BufferSource, reason?: RevocationReason) {
     return this.request(this.getDirectory().revokeCert, "POST", {
       certificate: Convert.ToBase64Url(certificate),
@@ -119,25 +148,37 @@ export class AcmeClient {
     });
   }
 
+  /**
+   * Account deactivation.
+   * changes account status to deactivated
+   */
   public async deactivateAccount() {
     return this.deactivate<IAccount>(this.getKeyId());
   }
 
+  /**
+   * Authorization deactivation.
+   * changes authorization status to deactivated
+   */
   public async deactivateAuthorization() {
     return this.deactivate<IAuthorization>(this.getKeyId());
   }
 
+  /**
+   * Deactivation Request
+   * @param url Deactivation element URL
+   */
   public async deactivate<T>(url: string) {
     return this.request<T>(url, "POST", { status: "deactivated" });
   }
 
   /**
-   * Запрос на сервер
-   * @param url адресс сервера
+   * Request for ACME server
+   * @param url адресс сервера ACME
    * @param method default "GET"
    * @param params 
    * @param options 
-   * @param kid 
+   * @param kid dafeult true
    */
   public async request<T>(
     url: string,
@@ -197,10 +238,21 @@ export class AcmeClient {
     return res;
   }
 
+  /**
+   * Create a new order.
+   * Returns an existing order if the identifiers parameter matches
+   * @param params 
+   */
   public async newOrder(params: INewOrder) {
     return this.request<IOrder>(this.getDirectory().newOrder, "POST", params);
   }
 
+  /**
+   * Getting data about challenge.
+   * The POST method starts checking on the ACME server side.
+   * @param url адресс сhallenge
+   * @param method метод вызова
+   */
   public async getChallenge(url: string, method: Method = "GET") {
     const res = await this.request<IHttpChallenge>(url, method, {}); //{}
     if (method === "POST") {
@@ -209,14 +261,29 @@ export class AcmeClient {
     return res;
   }
 
+  /**
+   * Order finalize
+   * @param url 
+   * @param params 
+   */
   public async finalize(url: string, params: IFinalize) {
     return this.request<IOrder>(url, "POST", params);
   }
 
+  /**
+   * Retrieving Authorization Data
+   * @param url адрес авторизации
+   * @param method метод вызова
+   */
   public async getAuthorization(url: string, method: Method = "GET") {
     return this.request<IAuthorization>(url, method);
   }
 
+  /**
+   * Obtaining a certificate of a complete order
+   * @param url 
+   * @param method 
+   */
   public async getCertificate(url: string, method: Method = "POST") {
     const response = await this.request<string>(url, method);
     const certs: string[] = [];
@@ -235,7 +302,7 @@ export class AcmeClient {
   }
 
   /**
-   * Создание JWS
+   * Creation JWS.
    * @param payload 
    * @param options 
    */
@@ -278,6 +345,9 @@ export class AcmeClient {
     return res;
   }
 
+  /**
+   * Getting an account id.
+   */
   public getKeyId() {
     if (!this.authKey.id) {
       throw new Error("Create or Find account first");
@@ -285,9 +355,13 @@ export class AcmeClient {
     return this.authKey.id;
   }
 
+  /**
+   * Getting the public key.
+   * @param key 
+   */
   public async exportPublicKey(key?: CryptoKey) {
     key = key || this.authKey.key;
-    let jwk = await crypto.subtle.exportKey("jwk", key || this.authKey.key);
+    let jwk = await crypto.subtle.exportKey("jwk", key);
     delete jwk.d;
     const publicKey = await crypto.subtle.importKey("jwk", jwk, key.algorithm as any, true, ["verify"]);
     jwk = await crypto.subtle.exportKey("jwk", publicKey);
@@ -295,6 +369,10 @@ export class AcmeClient {
     return jwk;
   }
 
+  /**
+   * Getting the secret key.
+   * @param key 
+   */
   private async getKeyPem(key: CryptoKey) {
     const pkcs8 = await crypto.subtle.exportKey("pkcs8", key);
     return core.PemConverter.fromBufferSource(
@@ -302,6 +380,9 @@ export class AcmeClient {
       "PRIVATE KEY");
   }
 
+  /**
+   * Returns a list of ACME server controllers.
+   */
   private getDirectory() {
     if (!this.directory) {
       throw new Error("Call 'initialize' method fist");
@@ -309,6 +390,10 @@ export class AcmeClient {
     return this.directory;
   }
 
+  /**
+   * Getting replay-nonce parameter response from the header
+   * @param response 
+   */
   private getNonce(response: Response) {
     const res = response.headers.get("replay-nonce");
     if (!res) {
@@ -317,10 +402,20 @@ export class AcmeClient {
     return res;
   }
 
+  /**
+   * Causes a time delay of a specified number of ms
+   * @param ms 
+   */
   private async pause(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /**
+   * Logging responses from the ACME server
+   * @param url 
+   * @param res 
+   * @param method 
+   */
   private logResponse(url: string, res: any, method: string) {
     if (this.debug) {
       console.log(`${method} RESPONSE ${url}`.blue);

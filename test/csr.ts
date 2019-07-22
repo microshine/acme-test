@@ -1,8 +1,13 @@
 const pkijs = require("pkijs");
 const asn1js = require("asn1js");
 
-import {Crypto} from "@peculiar/webcrypto";
+import { Crypto } from "@peculiar/webcrypto";
 
+/**
+ * Формирование CSR. Заказ на сертификат.
+ * @param algorithm Алгоритм генерации ключа
+ * @param domain Домен на который составляется заказ
+ */
 export async function generateCSR(algorithm: RsaHashedKeyGenParams | EcKeyGenParams, domain: string) {
 
   const crypto = new Crypto();
@@ -10,7 +15,7 @@ export async function generateCSR(algorithm: RsaHashedKeyGenParams | EcKeyGenPar
   let pkcs10 = new pkijs.CertificationRequest();
 
   // Set engine
-  pkijs.setEngine("Crypto", crypto, new pkijs.CryptoEngine({name: "Crypto", crypto, subtle: crypto.subtle}));
+  pkijs.setEngine("Crypto", crypto, new pkijs.CryptoEngine({ name: "Crypto", crypto, subtle: crypto.subtle }));
 
   const {
     publicKey,
@@ -21,7 +26,7 @@ export async function generateCSR(algorithm: RsaHashedKeyGenParams | EcKeyGenPar
   // pkcs10 = decoratePkcs10Subject(pkcs10, data);
   pkcs10.subject.typesAndValues.push(new pkijs.AttributeTypeAndValue({
     type: "2.5.4.3",
-    value: new asn1js.PrintableString({value: domain}),
+    value: new asn1js.PrintableString({ value: domain }),
   }));
   pkcs10.attributes = [];
 

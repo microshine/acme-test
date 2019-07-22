@@ -4,13 +4,13 @@ env();
 import * as assert from "assert";
 import fetch from "node-fetch";
 import { Convert } from "pvtsutils";
+import { PemConverter } from "webcrypto-core";
 import { AcmeClient, IHeaders, RevocationReason } from "../src/client";
 import { crypto } from "../src/crypto";
 import { AcmeError } from "../src/error";
 import { IOrder } from "../src/types";
 import { IAuthorization, IHttpChallenge } from "../src/types/authorization";
 import { generateCSR } from "./csr";
-import { PemConverter } from "webcrypto-core";
 
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
 
