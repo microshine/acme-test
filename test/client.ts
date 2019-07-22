@@ -207,6 +207,10 @@ context(`Client ${url}`, () => {
         });
     });
 
+    it.skip("urn:ietf:params:acme:error:userActionRequired", async () => {
+
+    });
+
     it("create order", async () => {
       const date = new Date();
       date.setFullYear(date.getFullYear() + 1);
@@ -301,7 +305,7 @@ context(`Client ${url}`, () => {
 
   });
 
-  context("Certificate Management", () => {
+  context.only("Certificate Management", () => {
 
     before(async () => {
       await preparation(true, true);
@@ -386,6 +390,19 @@ context(`Client ${url}`, () => {
       assert.equal(!!res.result, true);
     });
 
+    it("Error: bad revocation reason", async () => {
+      if (!order.certificate) {
+        throw new Error("certificate link undefined");
+      }
+      const res = await client.getCertificate(order.certificate);
+      const cert = PemConverter.toUint8Array(res.result[0]);
+      await assert.rejects(client.revoke(cert, 15), (err: AcmeError) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:badRevocationReason");
+        return true;
+      });
+    });
+
     it("revoke", async () => {
       if (!order.certificate) {
         throw new Error("certificate link undefined");
@@ -397,7 +414,7 @@ context(`Client ${url}`, () => {
       assert.equal(!!revoke.link, true);
     });
 
-    it("Error: revoke", async () => {
+    it("Error: already revoked", async () => {
       if (!order.certificate) {
         throw new Error("certificate link undefined");
       }
