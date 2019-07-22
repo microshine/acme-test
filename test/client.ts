@@ -414,6 +414,25 @@ context(`Client ${url}`, () => {
       assert.equal(!!revoke.link, true);
     });
 
+    it("revoke without reason", async () => {
+      await preparation(true, true);
+      authorization = (await client.getAuthorization(order.authorizations[0])).result;
+      await createURL();
+      const challenge = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
+      await client.getChallenge(challenge.url, "POST");
+      await pause(4000);
+      const csr = await generateCSR(rsaAlg, identifier.value);
+      order = (await client.finalize(order.finalize, { csr: Convert.ToBase64Url(csr.csr) })).result;
+      if (!order.certificate) {
+        throw new Error("certificate link undefined");
+      }
+      const res = await client.getCertificate(order.certificate);
+      const cert = PemConverter.toUint8Array(res.result[0]);
+      const revoke = await client.revoke(cert);
+      assert.equal(revoke.status, 200);
+      assert.equal(!!revoke.link, true);
+    });
+
     it("Error: already revoked", async () => {
       if (!order.certificate) {
         throw new Error("certificate link undefined");
