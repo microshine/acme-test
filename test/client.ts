@@ -102,6 +102,27 @@ context(`Client ${url}`, () => {
       });
     });
 
+    it("Error: create account with unsupported contact", async () => {
+      await assert.rejects(client.createAccount({
+        contact: ["mailt:microshine@mail.ru"],
+        termsOfServiceAgreed: true,
+      }), (err: AcmeError) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:unsupportedContact");
+        return true;
+      });
+    });
+
+    it("Error: ", async () => {
+      await assert.rejects(client.createAccount({
+        contact: ["mailto:microshine"],
+        termsOfServiceAgreed: true,
+      }), (err: AcmeError) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:invalidContact");
+        return true;
+      });
+    });
     // todo: mailto
     // todo: validate email
     it("create account", async () => {
@@ -327,24 +348,6 @@ context(`Client ${url}`, () => {
 
     it("Error: unsupported algorithm", async () => {
       const newrsaAlg: RsaHashedKeyGenParams = {
-        name: "HMAC",
-        hash: "SHA-256",
-        publicExponent: new Uint8Array([1, 0, 1]),
-        modulusLength: 2048,
-      };
-      const keys = await crypto.subtle.generateKey(newrsaAlg, true, ["sign", "verify"]);
-      const newAuthKey = keys.privateKey;
-      const newClient = new AcmeClient({ authKey: newAuthKey, debug: !!process.env["ACME_DEBUG"] });
-      await newClient.initialize(url);
-      await assert.rejects(newClient.createAccount({termsOfServiceAgreed: true}), (err: AcmeError) => {
-        console.log(err);
-        assert.equal(err.status, 400);
-        assert.equal(err.type, "urn:ietf:params:acme:error:badSignatureAlgorithm");
-      });
-    });
-
-    it("Error: unsupported algorithm", async () => {
-      const newrsaAlg: RsaHashedKeyGenParams = {
         name: "RSASSA-PKCS1-v1_5",
         hash: "SHA-1",
         publicExponent: new Uint8Array([1, 0, 1]),
@@ -354,7 +357,7 @@ context(`Client ${url}`, () => {
       const newAuthKey = keys.privateKey;
       const newClient = new AcmeClient({ authKey: newAuthKey, debug: !!process.env["ACME_DEBUG"] });
       await newClient.initialize(url);
-      await assert.rejects(newClient.createAccount({termsOfServiceAgreed: true}), (err: AcmeError) => {
+      await assert.rejects(newClient.createAccount({ termsOfServiceAgreed: true }), (err: AcmeError) => {
         assert.equal(err.status, 400);
         assert.equal(err.type, "urn:ietf:params:acme:error:badSignatureAlgorithm");
         return true;
@@ -372,7 +375,7 @@ context(`Client ${url}`, () => {
       const newAuthKey = keys.privateKey;
       const newClient = new AcmeClient({ authKey: newAuthKey, debug: !!process.env["ACME_DEBUG"] });
       await newClient.initialize(url);
-      await assert.rejects(newClient.createAccount({termsOfServiceAgreed: true}), (err: AcmeError) => {
+      await assert.rejects(newClient.createAccount({ termsOfServiceAgreed: true }), (err: AcmeError) => {
         assert.equal(err.status, 400);
         assert.equal(err.type, "urn:ietf:params:acme:error:badPublicKey");
         return true;
@@ -380,7 +383,6 @@ context(`Client ${url}`, () => {
     });
 
     it("authorization", async () => {
-      console.log(await client.getAuthorization(order.authorizations[0]));
       const res = await client.getAuthorization(order.authorizations[0]);
       assert.equal(!!res.link, true);
       // assert.equal(res.headers.has("replay-nonce"), true);
