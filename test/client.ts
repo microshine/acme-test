@@ -8,7 +8,7 @@ import { PemConverter } from "webcrypto-core";
 import { AcmeClient, IHeaders, RevocationReason } from "../src/client";
 import { crypto } from "../src/crypto";
 import { AcmeError } from "../src/error";
-import { IOrder } from "../src/types";
+import { IOrder, ICreateAccount } from "../src/types";
 import { IAuthorization, IHttpChallenge } from "../src/types/authorization";
 import { generateCSR } from "./csr";
 
@@ -305,13 +305,82 @@ context(`Client ${url}`, () => {
 
   });
 
-  context.only("Certificate Management", () => {
+  context("Certificate Management", () => {
 
     before(async () => {
       await preparation(true, true);
     });
 
+    it("Error: Unsupported Media Type", async () => {
+      const href = order.authorizations[0];
+      const token = await client.createJWS("", Object.assign({ url: href }, { kid: client.getKeyId() }));
+      const res = await fetch(href, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(token),
+      });
+      assert.equal(res.status, 415);
+      assert.equal(res.statusText, "Unsupported Media Type");
+    });
+
+    it("Error: unsupported algorithm", async () => {
+      const newrsaAlg: RsaHashedKeyGenParams = {
+        name: "HMAC",
+        hash: "SHA-256",
+        publicExponent: new Uint8Array([1, 0, 1]),
+        modulusLength: 2048,
+      };
+      const keys = await crypto.subtle.generateKey(newrsaAlg, true, ["sign", "verify"]);
+      const newAuthKey = keys.privateKey;
+      const newClient = new AcmeClient({ authKey: newAuthKey, debug: !!process.env["ACME_DEBUG"] });
+      await newClient.initialize(url);
+      await assert.rejects(newClient.createAccount({termsOfServiceAgreed: true}), (err: AcmeError) => {
+        console.log(err);
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:badSignatureAlgorithm");
+      });
+    });
+
+    it("Error: unsupported algorithm", async () => {
+      const newrsaAlg: RsaHashedKeyGenParams = {
+        name: "RSASSA-PKCS1-v1_5",
+        hash: "SHA-1",
+        publicExponent: new Uint8Array([1, 0, 1]),
+        modulusLength: 2048,
+      };
+      const keys = await crypto.subtle.generateKey(newrsaAlg, true, ["sign", "verify"]);
+      const newAuthKey = keys.privateKey;
+      const newClient = new AcmeClient({ authKey: newAuthKey, debug: !!process.env["ACME_DEBUG"] });
+      await newClient.initialize(url);
+      await assert.rejects(newClient.createAccount({termsOfServiceAgreed: true}), (err: AcmeError) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:badSignatureAlgorithm");
+        return true;
+      });
+    });
+
+    it.skip("Error: bad public key", async () => {
+      const newrsaAlg: RsaHashedKeyGenParams = {
+        name: "RSASSA-PKCS1-v1_5",
+        hash: "p-384",
+        publicExponent: new Uint8Array([1, 0, 1]),
+        modulusLength: 2048,
+      };
+      const keys = await crypto.subtle.generateKey(newrsaAlg, true, ["sign", "verify"]);
+      const newAuthKey = keys.privateKey;
+      const newClient = new AcmeClient({ authKey: newAuthKey, debug: !!process.env["ACME_DEBUG"] });
+      await newClient.initialize(url);
+      await assert.rejects(newClient.createAccount({termsOfServiceAgreed: true}), (err: AcmeError) => {
+        assert.equal(err.status, 400);
+        assert.equal(err.type, "urn:ietf:params:acme:error:badPublicKey");
+        return true;
+      });
+    });
+
     it("authorization", async () => {
+      console.log(await client.getAuthorization(order.authorizations[0]));
       const res = await client.getAuthorization(order.authorizations[0]);
       assert.equal(!!res.link, true);
       // assert.equal(res.headers.has("replay-nonce"), true);
