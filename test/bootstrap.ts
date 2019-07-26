@@ -24,9 +24,11 @@ export const IDENTIFIER = {
 };
 export const CONTACT = process.env["CONTACT"] || "";
 
-export let testClient: AcmeClient;
-export let testAccount: IAccount;
-export let testAuthKey: CryptoKey;
+export interface IPreparation {
+  client: AcmeClient;
+  account: IAccount | undefined;
+  order: IOrder | undefined;
+}
 
 export function checkHeaders(client: AcmeClient, res: IPostResult<any>) {
   assert.equal(!!res.link, true);
@@ -58,27 +60,31 @@ export async function preparation(newAccount?: boolean, newOrder?: boolean) {
   // const acmeKey = process.env.ACME_KEY;
   // assert.equal(!!acmeKey, true, "Environment variable ACME_KEY does not exist");
   // authKey = await crypto.subtle.importKey("pkcs8", Buffer.from(acmeKey!, "base64"), rsaAlg, true, ["sign"]);
-  
-  let order: IOrder;
+
+  let order: IOrder | undefined;
+  let account: IAccount | undefined;
   const keys = await crypto.subtle.generateKey(ALGORITHM, true, ["sign", "verify"]);
-  testAuthKey = keys.privateKey;
-  testClient = new AcmeClient({ authKey: testAuthKey, debug: !!process.env["ACME_DEBUG"] });
-  await testClient.initialize(URL_SERVER);
-  
+  const client = new AcmeClient({ authKey: keys.privateKey, debug: !!process.env["ACME_DEBUG"] });
+  await client.initialize(URL_SERVER);
+
   if (newAccount) {
-    const res = await testClient.createAccount({
+    const res = await client.createAccount({
       contact: [CONTACT],
       termsOfServiceAgreed: true,
     });
-    testAccount = res.result;
+    account = res.result;
   }
 
   if (newOrder) {
     const params: any = { identifiers: [IDENTIFIER] };
-    const res = await testClient.newOrder(params);
+    const res = await client.newOrder(params);
     order = res.result;
-    return order;
   }
+  return {
+    client,
+    account,
+    order,
+  };
 }
 
 /**
@@ -86,7 +92,7 @@ export async function preparation(newAccount?: boolean, newOrder?: boolean) {
  * @param authorization 
  * @param client 
  */
-export async function createURL(client: AcmeClient, authorization: IAuthorization ) {
+export async function createURL(client: AcmeClient, authorization: IAuthorization) {
   const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
   const account = await client.createAccount({ onlyReturnExisting: true });
   // const json = JSON.stringify(account.result.key, Object.keys(account.result.key));

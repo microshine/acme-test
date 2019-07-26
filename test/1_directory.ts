@@ -1,11 +1,16 @@
 import * as assert from "assert";
+import { AcmeClient } from "../src/client";
 import { AcmeError } from "../src/error";
-import { IDENTIFIER, preparation, testClient, URL_SERVER } from "./bootstrap";
+import { IDENTIFIER, preparation, URL_SERVER } from "./bootstrap";
+import { errorType } from "./errors_type";
 
 context("Directory", () => {
 
+  let testClient: AcmeClient;
+
   before(async () => {
-    await preparation();
+    const prep = await preparation();
+    testClient = prep.client;
   });
 
   it("directory", async () => {
@@ -20,12 +25,13 @@ context("Directory", () => {
   });
 
   it("Error: replay-nonce", async () => {
-    await preparation(true);
+    const prep = await preparation(true);
+    testClient = prep.client;
     testClient.lastNonce = "badNonce";
     const params: any = { identifiers: [IDENTIFIER] };
     await assert.rejects(testClient.newOrder(params), (err: AcmeError) => {
       assert.equal(err.status, 400);
-      assert.equal(err.type, "urn:ietf:params:acme:error:badNonce");
+      assert.equal(err.type, errorType.badNonce);
       return true;
     });
   });
@@ -33,7 +39,7 @@ context("Directory", () => {
   it("Error: method not allowed", async () => {
     await assert.rejects(testClient.request(`${URL_SERVER}/ooops`), (err: AcmeError) => {
       assert.equal(err.status, 405);
-      assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
+      assert.equal(err.type, errorType.malformed);
       return true;
     });
   });

@@ -1,11 +1,16 @@
 import * as assert from "assert";
+import { AcmeClient } from "../src/client";
 import { AcmeError } from "../src/error";
-import { IDENTIFIER, preparation, testClient } from "./bootstrap";
+import { IDENTIFIER, preparation } from "./bootstrap";
+import { errorType } from "./errors_type";
 
 context("Order Management", () => {
 
+  let testClient: AcmeClient;
+
   before(async () => {
-    await preparation(true);
+    const prep = await preparation(true);
+    testClient = prep.client;
   });
 
   it("Error: create order without required params", async () => {
@@ -14,7 +19,7 @@ context("Order Management", () => {
     await assert.rejects(
       testClient.newOrder({ identifiers: [] }), (err: AcmeError) => {
         assert.equal(!!testClient.lastNonce, true);
-        assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
+        assert.equal(err.type, errorType.malformed);
         assert.equal(err.status, 400);
         return true;
       });
@@ -110,7 +115,7 @@ context("Order Management", () => {
     await assert.rejects(testClient.newOrder(params), (err: AcmeError) => {
       assert.equal(!!testClient.lastNonce, true);
       assert.equal(err.status, 401);
-      assert.equal(err.type, "urn:ietf:params:acme:error:unauthorized");
+      assert.equal(err.type, errorType.unauthorized);
       return true;
     });
   });

@@ -8,20 +8,23 @@ import { AcmeError } from "../src/error";
 import { IOrder } from "../src/types";
 import { IAuthorization, IHttpChallenge } from "../src/types/authorization";
 import {
-  ALGORITHM, checkHeaders, createURL, IDENTIFIER, pause, preparation, testClient, URL_SERVER,
+  ALGORITHM, checkHeaders, createURL, IDENTIFIER, pause, preparation, URL_SERVER,
 } from "./bootstrap";
 import { generateCSR } from "./csr";
+import { errorType } from "./errors_type";
 
 let authorization: IAuthorization;
 
 context("Certificate Management", () => {
 
   let order: IOrder;
+  let testClient: AcmeClient;
 
   before(async () => {
-    const res = await preparation(true, true);
-    if (res) {
-      order = res;
+    const prep = await preparation(true, true);
+    testClient = prep.client;
+    if (prep.order) {
+      order = prep.order;
     }
   });
 
@@ -56,7 +59,7 @@ context("Certificate Management", () => {
     await newClient.initialize(URL_SERVER);
     await assert.rejects(newClient.createAccount({ termsOfServiceAgreed: true }), (err: AcmeError) => {
       assert.equal(err.status, 400);
-      assert.equal(err.type, "urn:ietf:params:acme:error:badSignatureAlgorithm");
+      assert.equal(err.type, errorType.badSignatureAlgorithm);
       return true;
     });
   });
@@ -74,7 +77,7 @@ context("Certificate Management", () => {
     await newClient.initialize(URL_SERVER);
     await assert.rejects(newClient.createAccount({ termsOfServiceAgreed: true }), (err: AcmeError) => {
       assert.equal(err.status, 400);
-      assert.equal(err.type, "urn:ietf:params:acme:error:badPublicKey");
+      assert.equal(err.type, errorType.badPublicKey);
       return true;
     });
   });
@@ -141,7 +144,7 @@ context("Certificate Management", () => {
     await assert.rejects(
       testClient.finalize(order.finalize, { csr: Convert.ToBase64Url(csr.csr) }), (err: AcmeError) => {
         assert.equal(err.status, 400);
-        assert.equal(err.type, "urn:ietf:params:acme:error:malformed");
+        assert.equal(err.type, errorType.malformed);
         return true;
       });
   });
@@ -154,7 +157,7 @@ context("Certificate Management", () => {
     await assert.rejects(
       testClient.finalize(order.finalize, { csr: Convert.ToBase64Url(csr.csr) }), (err: AcmeError) => {
         assert.equal(err.status, 403);
-        assert.equal(err.type, "urn:ietf:params:acme:error:unauthorized");
+        assert.equal(err.type, errorType.unauthorized);
         return true;
       });
   });
@@ -192,7 +195,7 @@ context("Certificate Management", () => {
     const cert = PemConverter.toUint8Array(res.result[0]);
     await assert.rejects(testClient.revoke(cert, 15), (err: AcmeError) => {
       assert.equal(err.status, 400);
-      assert.equal(err.type, "urn:ietf:params:acme:error:badRevocationReason");
+      assert.equal(err.type, errorType.badRevocationReason);
       return true;
     });
   });
@@ -209,7 +212,11 @@ context("Certificate Management", () => {
   });
 
   it("revoke without reason", async () => {
-    await preparation(true, true);
+    const prep = await preparation(true, true);
+    testClient = prep.client;
+    if (prep.order) {
+      order = prep.order;
+    }
     authorization = (await testClient.getAuthorization(order.authorizations[0])).result;
     await createURL(testClient, authorization);
     const challenge = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
@@ -236,8 +243,18 @@ context("Certificate Management", () => {
     await assert.rejects(
       testClient.revoke(cert, RevocationReason.Unspecified), (err: AcmeError) => {
         assert.equal(err.status, 400);
-        assert.equal(err.type, "urn:ietf:params:acme:error:alreadyRevoked");
+        assert.equal(err.type, errorType.alreadyRevoked);
         return true;
       });
+  });
+
+  it("Error: access denied", async () => {
+    const prep = await preparation(true, true);
+    testClient = prep.client;
+    await assert.rejects(testClient.getAuthorization(order.authorizations[0]), (err: AcmeError) => {
+      assert.equal(err.status, 400);
+      assert.equal(err.type, errorType.malformed);
+      return true;
+    });
   });
 });
