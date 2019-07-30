@@ -24,7 +24,7 @@ context("Directory", () => {
     }
   });
 
-  it("Error: replay-nonce", async () => {
+  it.only("Error: replay-nonce", async () => {
     const prep = await preparation(true);
     testClient = prep.client;
     testClient.lastNonce = "badNonce";

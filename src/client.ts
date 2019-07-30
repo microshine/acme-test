@@ -4,6 +4,7 @@ import { Response } from "node-fetch";
 import fetch from "node-fetch";
 import { Convert } from "pvtsutils";
 import * as core from "webcrypto-core";
+import { errorType } from "../test/errors_type";
 import { crypto } from "./crypto";
 import { AcmeError } from "./error";
 import {
@@ -11,6 +12,7 @@ import {
   IDirectory, IFinalize, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
 } from "./types";
 import { IAuthorization, IHttpChallenge } from "./types/authorization";
+import { defineURL } from "./helper";
 
 export enum RevocationReason {
   Unspecified = 0,
@@ -83,8 +85,23 @@ export class AcmeClient {
    * @param url ACME Server Controller List Issue URL
    */
   public async initialize(url: string) {
-    const response = await fetch(url, { method: "GET" });
-    this.directory = await response.json();
+    try {
+      const response = await fetch(url, { method: "GET" });
+      this.directory = await response.json();
+      if (
+        !this.directory
+        || !defineURL(this.directory.keyChange)
+        || !defineURL(this.directory.newAccount)
+        || !defineURL(this.directory.newNonce)
+        || !defineURL(this.directory.newOrder)
+        || !defineURL(this.directory.revokeCert)
+      ) {
+        throw new AcmeError({type: errorType.malformed, status: 400, detail: ""});
+      }
+
+    } catch (error) {
+
+    }
     return this.directory;
   }
 
@@ -173,14 +190,41 @@ export class AcmeClient {
   }
 
   /**
+   * Request for ACME server with error handling badNonce
+   * @param url адресс сервера ACME
+   * @param method default "GET"
+   * @param params 
+   * @param kid dafeult true
+   */
+  public async request<T>(
+    url: string,
+    method: Method = "GET",
+    params?: any,
+    kid: boolean = true): Promise<IPostResult<T>> {
+    try {
+      const res = await this.requestACME<T>(url, method, params, kid);
+      return res;
+    } catch (error) {
+      if (error.type === errorType.badNonce) {
+        try {
+          const res = await this.requestACME<T>(url, method, params, kid);
+          return res;
+        } catch (err) {
+          error = err;
+        }
+      }
+      throw new AcmeError(error);
+    }
+  }
+
+  /**
    * Request for ACME server
    * @param url адресс сервера ACME
    * @param method default "GET"
    * @param params 
-   * @param options 
    * @param kid dafeult true
    */
-  public async request<T>(
+  public async requestACME<T>(
     url: string,
     method: Method = "GET",
     params?: any,
@@ -203,6 +247,7 @@ export class AcmeClient {
       body: JSON.stringify(token),
     });
     this.lastNonce = response.headers.get("replay-nonce") || "";
+
     const headers: IHeaders = {
       link: response.headers.get("link") || undefined,
       location: response.headers.get("location") || undefined,
@@ -397,7 +442,7 @@ export class AcmeClient {
   private getNonce(response: Response) {
     const res = response.headers.get("replay-nonce");
     if (!res) {
-      throw new Error("Cannot get Replay-nonce header");
+      throw new Error("Cannot get replay-nonce header");
     }
     return res;
   }
