@@ -2,10 +2,13 @@
   "name": "acme-test",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "build/index.js",
+  "module": "build/index.es.js",
+  "types": "build/index.d.ts",
   "scripts": {
     "test": "mocha",
-    "coverage": "nyc npm test"
+    "coverage": "nyc npm test",
+    "build": "rollup -c"
   },
   "repository": {
     "type": "git",
@@ -37,18 +40,20 @@
   "devDependencies": {
     "@types/jws": "^3.2.0",
     "@types/mocha": "^5.2.7",
-    "@types/node-fetch": "^2.3.7",
+    "@types/node-fetch": "^2.5.0",
     "@types/pkijs": "0.0.2",
-    "mocha": "^6.1.4",
+    "mocha": "^6.2.0",
+    "rollup": "^1.18.0",
+    "rollup-plugin-dts": "^0.13.0",
     "ts-node": "^8.3.0",
-    "typescript": "^3.5.2"
+    "typescript": "^3.5.3"
   },
   "dependencies": {
     "@peculiar/webcrypto": "^1.0.12",
     "@types/asn1js": "0.0.1",
     "@types/colors": "^1.2.1",
     "@types/dotenv": "^6.1.1",
-    "asn1js": "^2.0.22",
+    "asn1js": "^2.0.26",
     "colors": "^1.3.3",
     "dotenv": "^8.0.0",
     "jws": "^3.2.2",

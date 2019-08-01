@@ -1,0 +1,10 @@
+.nyc_output/
+coverage/
+examples/
+test/
+src/
+.vscode/
+.env
+.env.example
+rollup.config.js
+ts*.json
