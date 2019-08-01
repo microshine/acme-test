@@ -1,10 +1,10 @@
 import * as assert from "assert";
-import { AcmeClient } from "../../src/client";
-import { AcmeError } from "../../src/error";
-import { contextServer, IDENTIFIER, preparation, URL_SERVER } from "../bootstrap";
-import { errorType } from "../errors_type";
+import { AcmeClient } from "../src/client";
+import { AcmeError } from "../src/error";
+import { IDENTIFIER, itServer, preparation, URL_SERVER } from "./bootstrap";
+import { errorType } from "./errors_type";
 
-contextServer("Directory", () => {
+context("Directory", () => {
 
   let testClient: AcmeClient;
 
@@ -13,7 +13,11 @@ contextServer("Directory", () => {
     testClient = prep.client;
   });
 
-  it("directory", async () => {
+  it("Error: Create or Find account first", () => {
+    assert.throws(() => { testClient.getKeyId(); }, Error("Create or Find account first"));
+  });
+
+  itServer("directory", async () => {
     if (testClient.directory) {
       assert.equal(!!testClient.directory.keyChange, true);
       assert.equal(!!testClient.directory.newAccount, true);
@@ -24,7 +28,7 @@ contextServer("Directory", () => {
     }
   });
 
-  it("Error: replay-nonce", async () => {
+  it.skip("Error: replay-nonce", async () => {
     const prep = await preparation(true);
     testClient = prep.client;
     testClient.lastNonce = "badNonce";
@@ -36,7 +40,7 @@ contextServer("Directory", () => {
     });
   });
 
-  it("Error: method not allowed", async () => {
+  itServer("Error: method not allowed", async () => {
     await assert.rejects(testClient.request(`${URL_SERVER}/ooops`), (err: AcmeError) => {
       assert.equal(err.status, 405);
       assert.equal(err.type, errorType.malformed);

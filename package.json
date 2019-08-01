@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "coverage": "nyc npm test"
   },
   "repository": {
     "type": "git",
@@ -15,6 +16,22 @@
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/microshine/acme-test/issues"
+  },
+  "nyc": {
+    "extension": [
+      ".ts",
+      ".tsx"
+    ],
+    "include": [
+      "src/**/*.ts"
+    ],
+    "exclude": [
+      "**/*.d.ts"
+    ],
+    "reporter": [
+      "text-summary",
+      "html"
+    ]
   },
   "homepage": "https://github.com/microshine/acme-test#readme",
   "devDependencies": {

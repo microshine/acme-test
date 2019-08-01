@@ -2,20 +2,20 @@ import * as assert from "assert";
 import fetch from "node-fetch";
 import { Convert } from "pvtsutils";
 import { PemConverter } from "webcrypto-core";
-import { AcmeClient, RevocationReason } from "../../src/client";
-import { crypto } from "../../src/crypto";
-import { AcmeError } from "../../src/error";
-import { IOrder } from "../../src/types";
-import { IAuthorization, IHttpChallenge } from "../../src/types/authorization";
+import { AcmeClient, RevocationReason } from "../src/client";
+import { crypto } from "../src/crypto";
+import { AcmeError } from "../src/error";
+import { IOrder } from "../src/types";
+import { IAuthorization, IHttpChallenge } from "../src/types/authorization";
 import {
-  ALGORITHM, checkHeaders, contextServer, createURL, IDENTIFIER, pause, preparation, URL_SERVER,
-} from "../bootstrap";
-import { generateCSR } from "../csr";
-import { errorType } from "../errors_type";
+  ALGORITHM, checkHeaders, createURL, IDENTIFIER, itServer, pause, preparation, URL_SERVER,
+} from "./bootstrap";
+import { generateCSR } from "./csr";
+import { errorType } from "./errors_type";
 
 let authorization: IAuthorization;
 
-contextServer("Certificate Management", () => {
+context("Certificate Management", () => {
 
   let order: IOrder;
   let testClient: AcmeClient;
@@ -28,7 +28,7 @@ contextServer("Certificate Management", () => {
     }
   });
 
-  it("Error: Unsupported Media Type", async () => {
+  itServer("Error: Unsupported Media Type", async () => {
     const href = order.authorizations[0];
     const token = await testClient.createJWS("", Object.assign({ url: href }, { kid: testClient.getKeyId() }));
     const res = await fetch(href, {
@@ -46,7 +46,7 @@ contextServer("Certificate Management", () => {
     assert.equal(res.statusText, "Unsupported Media Type");
   });
 
-  it("Error: unsupported algorithm", async () => {
+  itServer("Error: unsupported algorithm", async () => {
     const newrsaAlg: RsaHashedKeyGenParams = {
       name: "RSASSA-PKCS1-v1_5",
       hash: "SHA-1",
@@ -64,7 +64,7 @@ contextServer("Certificate Management", () => {
     });
   });
 
-  it.skip("Error: bad public key", async () => {
+  itServer("Error: bad public key", async () => {
     const newrsaAlg: RsaHashedKeyGenParams = {
       name: "RSASSA-PKCS1-v1_5",
       hash: "p-384",
@@ -85,7 +85,6 @@ contextServer("Certificate Management", () => {
   it("authorization", async () => {
     const res = await testClient.getAuthorization(order.authorizations[0]);
     assert.equal(!!res.link, true);
-    // assert.equal(res.headers.has("replay-nonce"), true);
     assert.equal(res.status, 200);
     assert.equal(res.result.status, "pending");
     assert.equal(!!res.result.expires, true);
@@ -94,7 +93,7 @@ contextServer("Certificate Management", () => {
     authorization = res.result;
   });
 
-  it("challange http-01 pending", async () => {
+  itServer("challange http-01 pending", async () => {
     const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
     assert.equal(challange.status, "pending");
   });
@@ -115,7 +114,6 @@ contextServer("Certificate Management", () => {
   it("authorization valid", async () => {
     const res = await testClient.getAuthorization(order.authorizations[0]);
     assert.equal(!!res.link, true);
-    // assert.equal(res.headers.has("replay-nonce"), true);
     assert.equal(res.status, 200);
     assert.equal(res.result.status, "valid");
     assert.equal(!!res.result.expires, true);
@@ -136,7 +134,7 @@ contextServer("Certificate Management", () => {
     order = res.result;
   });
 
-  it("Error: finalize with bad CSR without identifier", async () => {
+  itServer("Error: finalize with bad CSR without identifier", async () => {
     const csr = await generateCSR(ALGORITHM);
     if (!order.finalize) {
       throw new Error("finalize link undefined");
@@ -149,7 +147,7 @@ contextServer("Certificate Management", () => {
       });
   });
 
-  it("Error: finalize with CSR with bad identifier", async () => {
+  itServer("Error: finalize with CSR with bad identifier", async () => {
     const csr = await generateCSR(ALGORITHM, "badIdentifier.com");
     if (!order.finalize) {
       throw new Error("finalize link undefined");
@@ -187,7 +185,7 @@ contextServer("Certificate Management", () => {
     assert.equal(!!res.result, true);
   });
 
-  it("Error: bad revocation reason", async () => {
+  itServer("Error: bad revocation reason", async () => {
     if (!order.certificate) {
       throw new Error("certificate link undefined");
     }
@@ -211,7 +209,7 @@ contextServer("Certificate Management", () => {
     assert.equal(!!revoke.link, true);
   });
 
-  it("revoke without reason", async () => {
+  itServer("revoke without reason", async () => {
     const prep = await preparation(true, true);
     testClient = prep.client;
     if (prep.order) {
@@ -234,7 +232,7 @@ contextServer("Certificate Management", () => {
     assert.equal(!!revoke.link, true);
   });
 
-  it("Error: already revoked", async () => {
+  itServer("Error: already revoked", async () => {
     if (!order.certificate) {
       throw new Error("certificate link undefined");
     }
@@ -248,7 +246,7 @@ contextServer("Certificate Management", () => {
       });
   });
 
-  it("Error: access denied", async () => {
+  itServer("Error: access denied", async () => {
     const prep = await preparation(true, true);
     testClient = prep.client;
     await assert.rejects(testClient.getAuthorization(order.authorizations[0]), (err: AcmeError) => {

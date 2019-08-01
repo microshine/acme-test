@@ -1,12 +1,12 @@
 import * as assert from "assert";
 import fetch from "node-fetch";
-import { AcmeClient } from "../../src/client";
-import { crypto } from "../../src/crypto";
-import { AcmeError } from "../../src/error";
-import { ALGORITHM, checkHeaders, checkResAccount, contextServer, preparation } from "../bootstrap";
-import { errorType } from "../errors_type";
+import { AcmeClient } from "../src/client";
+import { crypto } from "../src/crypto";
+import { AcmeError } from "../src/error";
+import { ALGORITHM, checkHeaders, checkResAccount, itServer, preparation } from "./bootstrap";
+import { errorType } from "./errors_type";
 
-contextServer("Account Management", () => {
+context("Account Management", () => {
 
   let testClient: AcmeClient;
 
@@ -15,7 +15,7 @@ contextServer("Account Management", () => {
     testClient = prep.client;
   });
 
-  it("Error: no agreement to the terms", async () => {
+  itServer("Error: no agreement to the terms", async () => {
     await assert.rejects(testClient.createAccount({
       contact: ["mailto:microshine@mail.ru"],
       termsOfServiceAgreed: false,
@@ -27,7 +27,7 @@ contextServer("Account Management", () => {
     });
   });
 
-  it("Error: find not exist account", async () => {
+  itServer("Error: find not exist account", async () => {
     await assert.rejects(testClient.createAccount({
       contact: ["mailto:microshine@mail.ru"],
       onlyReturnExisting: true,
@@ -39,7 +39,7 @@ contextServer("Account Management", () => {
     });
   });
 
-  it("Error: create account with unsupported contact", async () => {
+  itServer("Error: create account with unsupported contact", async () => {
     await assert.rejects(testClient.createAccount({
       contact: ["mailt:microshine@mail.ru"],
       termsOfServiceAgreed: true,
@@ -50,7 +50,7 @@ contextServer("Account Management", () => {
     });
   });
 
-  it("Error: create account with invalid contact", async () => {
+  itServer("Error: create account with invalid contact", async () => {
     await assert.rejects(testClient.createAccount({
       contact: ["mailto:microshine"],
       termsOfServiceAgreed: true,
@@ -60,8 +60,7 @@ contextServer("Account Management", () => {
       return true;
     });
   });
-  // todo: mailto
-  // todo: validate email
+
   it("create account", async () => {
     const res = await testClient.createAccount({
       contact: ["mailto:microshine@mail.ru"],
@@ -71,7 +70,7 @@ contextServer("Account Management", () => {
     checkResAccount(res, 201);
   });
 
-  it("create account with the same key", async () => {
+  itServer("create account with the same key", async () => {
     const res = await testClient.createAccount({
       contact: ["mailto:microshine2@mail.ru"],
       termsOfServiceAgreed: true,
@@ -80,7 +79,7 @@ contextServer("Account Management", () => {
     checkResAccount(res, 200);
   });
 
-  it("finding an account", async () => {
+  itServer("finding an account", async () => {
     const res = await testClient.createAccount({ onlyReturnExisting: true });
     checkHeaders(testClient, res);
     checkResAccount(res, 200);
@@ -101,9 +100,8 @@ contextServer("Account Management", () => {
     checkResAccount(res, 200);
   });
 
-  it("Error: account key rollover", async () => {
+  itServer("Error: account key rollover", async () => {
     await assert.rejects(testClient.changeKey(), (err: AcmeError) => {
-      // assert.equal(res.headers.has("location"), true);
       assert.equal(!!testClient.lastNonce, true);
       assert.equal(err.status, 409);
       assert.equal(err.type, errorType.incorrectResponse);
@@ -111,7 +109,7 @@ contextServer("Account Management", () => {
     });
   });
 
-  it("Error: method not allowed for GET", async () => {
+  itServer("Error: method not allowed for GET", async () => {
     const res = await testClient.createAccount({
       contact: ["mailto:microshine@mail.ru"],
       onlyReturnExisting: true,
@@ -133,7 +131,7 @@ contextServer("Account Management", () => {
     assert.equal(res.status, 200);
   });
 
-  it("Error: account with the provided public key exists but is deactivated", async () => {
+  itServer("Error: account with the provided public key exists but is deactivated", async () => {
     await assert.rejects(testClient.createAccount({
       contact: ["mailto:microshine@mail.ru"],
       termsOfServiceAgreed: true,

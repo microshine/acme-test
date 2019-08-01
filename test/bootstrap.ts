@@ -25,8 +25,7 @@ export const IDENTIFIER = {
 export const CONTACT = process.env["CONTACT"] || "";
 
 const serverTesting: boolean = process.env["SERVER_TESTING"] === "true" ? true : false;
-export const contextServer = serverTesting ? context.only : context;
-export const contextClient = serverTesting ? context : context.only;
+export const itServer = serverTesting ? it : it.skip;
 
 export interface IPreparation {
   client: AcmeClient;
@@ -61,9 +60,6 @@ export async function pause(ms: number) {
  * @param newOrder 
  */
 export async function preparation(newAccount?: boolean, newOrder?: boolean) {
-  // const acmeKey = process.env.ACME_KEY;
-  // assert.equal(!!acmeKey, true, "Environment variable ACME_KEY does not exist");
-  // authKey = await crypto.subtle.importKey("pkcs8", Buffer.from(acmeKey!, "base64"), rsaAlg, true, ["sign"]);
 
   let order: IOrder | undefined;
   let account: IAccount | undefined;
@@ -99,7 +95,6 @@ export async function preparation(newAccount?: boolean, newOrder?: boolean) {
 export async function createURL(client: AcmeClient, authorization: IAuthorization) {
   const challange = authorization.challenges.filter((o) => o.type === "http-01")[0] as IHttpChallenge;
   const account = await client.createAccount({ onlyReturnExisting: true });
-  // const json = JSON.stringify(account.result.key, Object.keys(account.result.key));
   delete account.result.key.alg;
   const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
   const id = challange.token;

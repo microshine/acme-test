@@ -161,8 +161,8 @@ export class AcmeClient {
    * Authorization deactivation.
    * changes authorization status to deactivated
    */
-  public async deactivateAuthorization() {
-    return this.deactivate<IAuthorization>(this.getKeyId());
+  public async deactivateAuthorization(url: string) {
+    return this.deactivate<IAuthorization>(url);
   }
 
   /**
@@ -392,7 +392,6 @@ export class AcmeClient {
     delete jwk.d;
     const publicKey = await crypto.subtle.importKey("jwk", jwk, key.algorithm as any, true, ["verify"]);
     jwk = await crypto.subtle.exportKey("jwk", publicKey);
-    // delete jwk.alg;
     return jwk;
   }
 

@@ -1,10 +1,10 @@
 import * as assert from "assert";
-import { AcmeClient } from "../../src/client";
-import { AcmeError } from "../../src/error";
-import { contextServer, IDENTIFIER, preparation } from "../bootstrap";
-import { errorType } from "../errors_type";
+import { AcmeClient } from "../src/client";
+import { AcmeError } from "../src/error";
+import { IDENTIFIER, itServer, preparation } from "./bootstrap";
+import { errorType } from "./errors_type";
 
-contextServer("Order Management", () => {
+context("Order Management", () => {
 
   let testClient: AcmeClient;
 
@@ -13,7 +13,7 @@ contextServer("Order Management", () => {
     testClient = prep.client;
   });
 
-  it("Error: create order without required params", async () => {
+  itServer("Error: create order without required params", async () => {
     const date = new Date();
     date.setFullYear(date.getFullYear() + 1);
     await assert.rejects(
@@ -25,13 +25,7 @@ contextServer("Order Management", () => {
       });
   });
 
-  it.skip("urn:ietf:params:acme:error:userActionRequired", async () => {
-
-  });
-
   it("create order", async () => {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() + 1);
     const params: any = { identifiers: [IDENTIFIER] };
     const res = await testClient.newOrder(params);
     assert.equal(!!res.link, true);
@@ -42,7 +36,19 @@ contextServer("Order Management", () => {
     assert.equal(!!res.result.authorizations, true);
   });
 
-  it("create duplicate order", async () => {
+  it("re-request when sent invalid replay-nonce", async () => {
+    testClient.lastNonce = "badNonce";
+    const params: any = { identifiers: [IDENTIFIER] };
+    const res = await testClient.newOrder(params);
+    assert.equal(!!res.link, true);
+    assert.equal(!!testClient.lastNonce, true);
+    assert.equal(res.status, 201);
+    assert.equal(res.result.status, "pending");
+    assert.equal(!!res.result.expires, true);
+    assert.equal(!!res.result.authorizations, true);
+  });
+
+  itServer("create duplicate order", async () => {
     const params: any = { identifiers: [IDENTIFIER] };
     const order1 = await testClient.newOrder(params);
     const order2 = await testClient.newOrder(params);
@@ -51,7 +57,7 @@ contextServer("Order Management", () => {
     assert.equal(order2.status, 201);
   });
 
-  it("create new order with extended identifier", async () => {
+  itServer("create new order with extended identifier", async () => {
     const params1: any = {
       identifiers: [
         { type: "dns", value: "test5.com" },
@@ -70,7 +76,7 @@ contextServer("Order Management", () => {
     assert.equal(order2.status, 201);
   });
 
-  it("create new order with one of the  identifier", async () => {
+  itServer("create new order with one of the  identifier", async () => {
     const params1: any = {
       identifiers: [
         { type: "dns", value: "test3.com" },
@@ -89,7 +95,7 @@ contextServer("Order Management", () => {
     assert.equal(order2.status, 201);
   });
 
-  it("create new order with same identifiers", async () => {
+  itServer("create new order with same identifiers", async () => {
     const params1: any = {
       identifiers: [
         { type: "dns", value: "test1.com" },
@@ -108,8 +114,16 @@ contextServer("Order Management", () => {
     assert.deepEqual(order1.result.authorizations.sort(), order2.result.authorizations.sort());
     assert.equal(order2.status, 201);
   });
+  
+  it("authorization deactivation", async () => {
+    const params: any = { identifiers: [{type: "dns", value: "identifier.com"}] };
+    const order = await testClient.newOrder(params);
+    const res = await testClient.deactivateAuthorization(order.result.authorizations[0]);
+    assert.equal(res.result.status, "deactivated");
+    assert.equal(res.status, 200);
+  });
 
-  it("Error: Account is not valid, has status deactivated", async () => {
+  itServer("Error: Account is not valid, has status deactivated", async () => {
     await testClient.deactivateAccount();
     const params: any = { identifiers: [IDENTIFIER] };
     await assert.rejects(testClient.newOrder(params), (err: AcmeError) => {
