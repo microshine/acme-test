@@ -24,6 +24,10 @@ export const IDENTIFIER = {
 };
 export const CONTACT = process.env["CONTACT"] || "";
 
+const serverTesting: boolean = process.env["SERVER_TESTING"] === "true" ? true : false;
+export const contextServer = serverTesting ? context.only : context;
+export const contextClient = serverTesting ? context : context.only;
+
 export interface IPreparation {
   client: AcmeClient;
   account: IAccount | undefined;

@@ -1,12 +1,12 @@
 import * as assert from "assert";
 import fetch from "node-fetch";
-import { AcmeClient } from "../src/client";
-import { crypto } from "../src/crypto";
-import { AcmeError } from "../src/error";
-import { ALGORITHM, checkHeaders, checkResAccount, preparation } from "./bootstrap";
-import { errorType } from "./errors_type";
+import { AcmeClient } from "../../src/client";
+import { crypto } from "../../src/crypto";
+import { AcmeError } from "../../src/error";
+import { ALGORITHM, checkHeaders, checkResAccount, contextServer, preparation } from "../bootstrap";
+import { errorType } from "../errors_type";
 
-context("Account Management", () => {
+contextServer("Account Management", () => {
 
   let testClient: AcmeClient;
 

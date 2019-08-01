@@ -12,7 +12,6 @@ import {
   IDirectory, IFinalize, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
 } from "./types";
 import { IAuthorization, IHttpChallenge } from "./types/authorization";
-import { defineURL } from "./helper";
 
 export enum RevocationReason {
   Unspecified = 0,
@@ -85,23 +84,8 @@ export class AcmeClient {
    * @param url ACME Server Controller List Issue URL
    */
   public async initialize(url: string) {
-    try {
-      const response = await fetch(url, { method: "GET" });
-      this.directory = await response.json();
-      if (
-        !this.directory
-        || !defineURL(this.directory.keyChange)
-        || !defineURL(this.directory.newAccount)
-        || !defineURL(this.directory.newNonce)
-        || !defineURL(this.directory.newOrder)
-        || !defineURL(this.directory.revokeCert)
-      ) {
-        throw new AcmeError({type: errorType.malformed, status: 400, detail: ""});
-      }
-
-    } catch (error) {
-
-    }
+    const response = await fetch(url, { method: "GET" });
+    this.directory = await response.json();
     return this.directory;
   }
 
@@ -253,8 +237,6 @@ export class AcmeClient {
       location: response.headers.get("location") || undefined,
     };
     if (!(response.status >= 200 && response.status < 300)) {
-      // TODO: throw exception
-      // TODO: Detect ACME exception
       const error = await response.text();
       let errJson: any;
       try {
@@ -299,7 +281,7 @@ export class AcmeClient {
    * @param method метод вызова
    */
   public async getChallenge(url: string, method: Method = "GET") {
-    const res = await this.request<IHttpChallenge>(url, method, {}); //{}
+    const res = await this.request<IHttpChallenge>(url, method, {});
     if (method === "POST") {
       await this.pause(2000);
     }

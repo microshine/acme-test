@@ -1,10 +1,10 @@
 import * as assert from "assert";
-import { AcmeClient } from "../src/client";
-import { AcmeError } from "../src/error";
-import { IDENTIFIER, preparation } from "./bootstrap";
-import { errorType } from "./errors_type";
+import { AcmeClient } from "../../src/client";
+import { AcmeError } from "../../src/error";
+import { contextServer, IDENTIFIER, preparation } from "../bootstrap";
+import { errorType } from "../errors_type";
 
-context("Order Management", () => {
+contextServer("Order Management", () => {
 
   let testClient: AcmeClient;
 

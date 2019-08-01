@@ -2,20 +2,20 @@ import * as assert from "assert";
 import fetch from "node-fetch";
 import { Convert } from "pvtsutils";
 import { PemConverter } from "webcrypto-core";
-import { AcmeClient, RevocationReason } from "../src/client";
-import { crypto } from "../src/crypto";
-import { AcmeError } from "../src/error";
-import { IOrder } from "../src/types";
-import { IAuthorization, IHttpChallenge } from "../src/types/authorization";
+import { AcmeClient, RevocationReason } from "../../src/client";
+import { crypto } from "../../src/crypto";
+import { AcmeError } from "../../src/error";
+import { IOrder } from "../../src/types";
+import { IAuthorization, IHttpChallenge } from "../../src/types/authorization";
 import {
-  ALGORITHM, checkHeaders, createURL, IDENTIFIER, pause, preparation, URL_SERVER,
-} from "./bootstrap";
-import { generateCSR } from "./csr";
-import { errorType } from "./errors_type";
+  ALGORITHM, checkHeaders, contextServer, createURL, IDENTIFIER, pause, preparation, URL_SERVER,
+} from "../bootstrap";
+import { generateCSR } from "../csr";
+import { errorType } from "../errors_type";
 
 let authorization: IAuthorization;
 
-context("Certificate Management", () => {
+contextServer("Certificate Management", () => {
 
   let order: IOrder;
   let testClient: AcmeClient;

@@ -1,10 +1,10 @@
 import * as assert from "assert";
-import { AcmeClient } from "../src/client";
-import { AcmeError } from "../src/error";
-import { IDENTIFIER, preparation, URL_SERVER } from "./bootstrap";
-import { errorType } from "./errors_type";
+import { AcmeClient } from "../../src/client";
+import { AcmeError } from "../../src/error";
+import { contextServer, IDENTIFIER, preparation, URL_SERVER } from "../bootstrap";
+import { errorType } from "../errors_type";
 
-context("Directory", () => {
+contextServer("Directory", () => {
 
   let testClient: AcmeClient;
 
@@ -24,7 +24,7 @@ context("Directory", () => {
     }
   });
 
-  it.only("Error: replay-nonce", async () => {
+  it("Error: replay-nonce", async () => {
     const prep = await preparation(true);
     testClient = prep.client;
     testClient.lastNonce = "badNonce";
