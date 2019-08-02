@@ -1,10 +1,11 @@
 import "colors";
-import {Convert} from "pvtsutils";
-import {PemConverter} from "webcrypto-core";
-import {AcmeClient} from "../src/client";
-import {crypto} from "../src/crypto";
-import {IHttpChallenge} from "../src/types/authorization";
-import {generateCSR} from "../test/csr";
+import { Convert } from "pvtsutils";
+import { PemConverter } from "webcrypto-core";
+import { AcmeClient } from "../src/client";
+import { crypto } from "../src/crypto";
+import { IHttpChallenge } from "../src/types/authorization";
+import { generateCSR } from "../test/csr";
+import { createURL } from "../test/bootstrap";
 
 export interface ICertificateOptions {
   url: string;
@@ -28,7 +29,7 @@ export async function main(options: ICertificateOptions) {
     options.keys = await crypto.subtle.generateKey(options.algorithm, true, ["sign", "verify"]);
     console.log("Generated new keys: completed".yellow);
   }
-  const client = new AcmeClient({authKey: options.keys.privateKey});
+  const client = new AcmeClient({ authKey: options.keys.privateKey });
   const directory = await client.initialize(options.url);
   console.log("Directory:".yellow);
   console.log(directory);
@@ -40,7 +41,7 @@ export async function main(options: ICertificateOptions) {
   console.log(account.result);
 
   const params: any = {
-    identifiers: [{type: "dns", value: options.domain}],
+    identifiers: [{ type: "dns", value: options.domain }],
   };
   const date = new Date();
   if (options.yearsValid) {
@@ -57,16 +58,12 @@ export async function main(options: ICertificateOptions) {
 
   //#region создание ссылки на тестовом сервере
   delete account.result.key.alg;
-  const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
-  await client.createURL(
-    "http://aeg-dev0-srv.aegdomain2.com/acme-challenge", challange.token,
-    Convert.ToBase64Url(await crypto.subtle.digest("SHA-256", Buffer.from(json))),
-  );
+  await createURL(client, authorization);
   //#endregion
 
   await client.getChallenge(challange.url, "POST");
   const csr = await generateCSR(options.algorithm, options.domain);
-  const finalize = (await client.finalize(order.result.finalize, {csr: Convert.ToBase64Url(csr.csr)})).result;
+  const finalize = (await client.finalize(order.result.finalize, { csr: Convert.ToBase64Url(csr.csr) })).result;
   if (!finalize.certificate) {
     throw new Error("No certificate link");
   }
@@ -85,7 +82,7 @@ export async function main(options: ICertificateOptions) {
 const test: ICertificateOptions = {
   url: "https://acme-staging-v02.api.letsencrypt.org/directory",
   domain: "aeg-dev0-srv.aegdomain2.com",
-  contact: ["mailto:microshine@mail.ru"],
+  contact: ["mailto:example@mail.com"],
 };
 
 main(test).catch((err) => console.error(err));
