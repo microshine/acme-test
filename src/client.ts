@@ -392,7 +392,7 @@ export class AcmeClient {
   /**
    * Returns a list of ACME server controllers.
    */
-  private getDirectory() {
+  public getDirectory() {
     if (!this.directory) {
       throw new Error("Call 'initialize' method fist");
     }
