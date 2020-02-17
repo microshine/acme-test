@@ -1,0 +1,4 @@
+test/
+.env
+ts*.json
+src/

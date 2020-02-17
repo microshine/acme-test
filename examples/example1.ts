@@ -1,10 +1,14 @@
+import { config as env } from "dotenv";
+env();
+
 import "colors";
-import {Convert} from "pvtsutils";
-import {PemConverter} from "webcrypto-core";
-import {AcmeClient} from "../src/client";
-import {crypto} from "../src/crypto";
-import {IHttpChallenge} from "../src/types/authorization";
-import {generateCSR} from "../test/csr";
+import { Convert } from "pvtsutils";
+import { PemConverter } from "webcrypto-core";
+import { AcmeClient, IPostResult } from "../src/client";
+import { crypto } from "../src/crypto";
+import { IHttpChallenge } from "../src/types/authorization";
+import { generateCSR } from "../test/csr";
+import { IOrder, IExternalAccountBinding } from "../src/types";
 
 export interface ICertificateOptions {
   url: string;
@@ -28,19 +32,30 @@ export async function main(options: ICertificateOptions) {
     options.keys = await crypto.subtle.generateKey(options.algorithm, true, ["sign", "verify"]);
     console.log("Generated new keys: completed".yellow);
   }
-  const client = new AcmeClient({authKey: options.keys.privateKey});
+  const client = new AcmeClient({ authKey: options.keys.privateKey, debug: true });
   const directory = await client.initialize(options.url);
   console.log("Directory:".yellow);
   console.log(directory);
+
+  // Create externalAccountBinding
+  let externalAccountBinding: IExternalAccountBinding | undefined;
+  if (process.env.ACCOUNT_CHALLENGE && process.env.ACCOUNT_KID) {
+    externalAccountBinding = {
+      challenge: process.env.ACCOUNT_CHALLENGE,
+      kid: process.env.ACCOUNT_KID
+    }
+  }
+
   const account = await client.createAccount({
     contact: options.contact,
     termsOfServiceAgreed: true,
+    externalAccountBinding,
   });
   console.log("Account:".yellow);
   console.log(account.result);
 
   const params: any = {
-    identifiers: [{type: "dns", value: options.domain}],
+    identifiers: [{ type: "dns", value: options.domain }],
   };
   const date = new Date();
   if (options.yearsValid) {
@@ -58,19 +73,35 @@ export async function main(options: ICertificateOptions) {
   //#region создание ссылки на тестовом сервере
   delete account.result.key.alg;
   const json = JSON.stringify(account.result.key, Object.keys(account.result.key).sort());
+  const thumb = Convert.ToBase64(await crypto.subtle.digest("SHA-256", Buffer.from(json)));
+  console.log(json);
+  console.log(thumb);
+  /*
   await client.createURL(
     "http://aeg-dev0-srv.aegdomain2.com/acme-challenge", challange.token,
     Convert.ToBase64Url(await crypto.subtle.digest("SHA-256", Buffer.from(json))),
   );
+  */
   //#endregion
 
   await client.getChallenge(challange.url, "POST");
   const csr = await generateCSR(options.algorithm, options.domain);
-  const finalize = (await client.finalize(order.result.finalize, {csr: Convert.ToBase64Url(csr.csr)})).result;
-  if (!finalize.certificate) {
-    throw new Error("No certificate link");
+  console.log(Convert.ToBase64Url(csr.csr));
+  const finalize = (await client.finalize(order.result.finalize, { csr: Convert.ToBase64Url(csr.csr) })).result;
+  // Poll certificate status
+  let orderStatus: IPostResult<IOrder>;
+  do {
+    orderStatus = await client.request(order.location!, "GET");
+    await client.pause(2000);
+  } while (!(orderStatus.result.status === "valid" || orderStatus.result.status === "invalid"));
+
+  if (orderStatus.result.status === "invalid") {
+    console.error(`Cannot enroll certificate. ${order.result.errors!.detail}`);
+    return;
   }
-  const res = await client.getCertificate(finalize.certificate);
+  // Get enrolled certificate
+  const res = await client.getCertificate(orderStatus.result.certificate!);
+  console.log("Certificate enrolled".green);
   const privateKey = await crypto.subtle.exportKey("pkcs8", options.keys.privateKey);
   const publicKey = await crypto.subtle.exportKey("spki", options.keys.publicKey);
   console.log("PRIVATE KEY".yellow);
@@ -83,8 +114,8 @@ export async function main(options: ICertificateOptions) {
 }
 
 const test: ICertificateOptions = {
-  url: "https://acme-staging-v02.api.letsencrypt.org/directory",
-  domain: "aeg-dev0-srv.aegdomain2.com",
+  url: process.env.URL_SERVER!,
+  domain: process.env.IDENTIFIER_VALUE!,
   contact: ["mailto:microshine@mail.ru"],
 };
 

@@ -42,7 +42,7 @@ context("Order Management", () => {
     assert.equal(!!res.result.authorizations, true);
   });
 
-  it("create duplicate order", async () => {
+  it.only("create duplicate order", async () => {
     const params: any = { identifiers: [IDENTIFIER] };
     const order1 = await testClient.newOrder(params);
     const order2 = await testClient.newOrder(params);

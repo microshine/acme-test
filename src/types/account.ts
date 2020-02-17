@@ -1,4 +1,4 @@
-import {URL} from "./directory";
+import { URL } from "./directory";
 import { IToken } from "./token";
 
 export interface IAccount {
@@ -9,11 +9,23 @@ export interface IAccount {
   key: JsonWebKey;
 }
 
-export interface ICreateAccount {
+export interface ICreateAccountProtocol {
   contact?: string[];
   termsOfServiceAgreed?: boolean;
   onlyReturnExisting?: boolean;
   externalAccountBinding?: IToken;
+}
+
+export interface ICreateAccount {
+  contact?: string[];
+  termsOfServiceAgreed?: boolean;
+  onlyReturnExisting?: boolean;
+  externalAccountBinding?: IExternalAccountBinding;
+}
+
+export interface IExternalAccountBinding {
+  challenge: string;
+  kid: string;
 }
 
 export interface IUpdateAccount {

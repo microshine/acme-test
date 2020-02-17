@@ -2,9 +2,13 @@
   "name": "acme-test",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "build/index.js",
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "prepare": "npm run build",
+    "prebuild": "npm run clear",
+    "build": "tsc",
+    "clear": "rimraf build"
   },
   "repository": {
     "type": "git",
@@ -38,6 +42,7 @@
     "node-fetch": "^2.6.0",
     "pkijs": "^2.1.80",
     "pvtsutils": "^1.0.4",
+    "rimraf": "^3.0.2",
     "webcrypto-core": "^1.0.12"
   }
 }

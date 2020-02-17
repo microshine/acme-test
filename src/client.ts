@@ -6,8 +6,9 @@ import { Convert } from "pvtsutils";
 import * as core from "webcrypto-core";
 import { crypto } from "./crypto";
 import { AcmeError } from "./error";
+import { inspect } from "util";
 import {
-  Base64UrlString, IAccount, ICreateAccount,
+  Base64UrlString, IAccount, ICreateAccountProtocol, ICreateAccount,
   IDirectory, IFinalize, IKeyChange, INewOrder, IOrder, IToken, IUpdateAccount,
 } from "./types";
 import { IAuthorization, IHttpChallenge } from "./types/authorization";
@@ -103,7 +104,15 @@ export class AcmeClient {
    * @param params Request parameters
    */
   public async createAccount(params: ICreateAccount) {
-    const res = await this.request<IAccount>(this.getDirectory().newAccount, "POST", params, false);
+    const newParam: ICreateAccountProtocol = {
+      contact: params.contact,
+      onlyReturnExisting: params.onlyReturnExisting,
+      termsOfServiceAgreed: params.termsOfServiceAgreed
+    }
+    if (params.externalAccountBinding) {
+      newParam.externalAccountBinding = await this.createExternalAccountBinding(params.externalAccountBinding.challenge, params.externalAccountBinding.kid);
+    }
+    const res = await this.request<IAccount>(this.getDirectory().newAccount, "POST", newParam, false);
     if (!res.location) {
       throw new Error("Cannot get Location header");
     }
@@ -215,7 +224,7 @@ export class AcmeClient {
       try {
         errJson = JSON.parse(error);
         this.logResponse(url, errJson, method);
-      } catch {
+      } catch (ex) {
         throw new Error(error);
       }
       throw new AcmeError(errJson);
@@ -406,7 +415,7 @@ export class AcmeClient {
    * Causes a time delay of a specified number of ms
    * @param ms 
    */
-  private async pause(ms: number) {
+  public async pause(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
@@ -419,7 +428,25 @@ export class AcmeClient {
   private logResponse(url: string, res: any, method: string) {
     if (this.debug) {
       console.log(`${method} RESPONSE ${url}`.blue);
-      console.log("Result", res);
+      console.log("Result", inspect(res, false, 10, true));
     }
+  }
+
+  public async createExternalAccountBinding(challenge: string, kid: string) {
+    // Create externalAccountBinding
+    const hmac = await crypto.subtle.importKey(
+      "raw",
+      Convert.FromBase64Url(challenge), // challenge password from AEG portal
+      { name: "HMAC", hash: "SHA-256" },
+      true,
+      ["sign"]);
+    const jwk = await this.exportPublicKey(); // ACME client authorization public key
+    const externalAccountBinding = await this.createJWS(jwk, {
+      omitNonce: true,
+      key: hmac,
+      kid, // kid, ACME server uses it for HMAC getting
+      // for signature verification
+    });
+    return externalAccountBinding;
   }
 }
