@@ -7,6 +7,7 @@ export interface IAccount {
   termsOfServiceAgreed?: boolean;
   orders: URL;
   key: JsonWebKey;
+  externalAccountBinding: any;
 }
 
 export interface ICreateAccountProtocol {
