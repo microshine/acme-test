@@ -27,7 +27,7 @@
     "@types/mocha": "^5.2.7",
     "@types/node-fetch": "^2.3.7",
     "@types/pkijs": "0.0.2",
-    "mocha": "^6.1.4",
+    "mocha": "^10.2.0",
     "ts-node": "^8.3.0",
     "typescript": "^3.5.2"
   },
